@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Владимир — портфолио</title>
+  <meta name="description" content="Личный сайт-портфолио: обо мне, проекты, навыки и контакты.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    try {
+      const t = localStorage.getItem('theme');
+      if (t) document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="#top" class="logo">В<span>.</span></a>
+      <nav class="nav" id="nav">
+        <a href="#about">Обо мне</a>
+        <a href="#projects">Проекты</a>
+        <a href="#skills">Навыки</a>
+        <a href="#contact">Контакты</a>
+      </nav>
+      <div class="header__actions">
+        <button class="icon-btn" id="theme-toggle" aria-label="Сменить тему">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+        <button class="icon-btn burger" id="burger" aria-label="Меню" aria-expanded="false" aria-controls="nav">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero__inner">
+        <p class="eyebrow">Привет, я</p>
+        <h1>Владимир — <span class="accent">разработчик</span>,<br>который делает понятные продукты</h1>
+        <p class="lead">Создаю быстрые сайты и веб-приложения: от идеи и дизайна до запуска. Люблю чистый код, аккуратные интерфейсы и измеримый результат.</p>
+        <div class="hero__cta">
+          <a href="#projects" class="btn btn--primary">Смотреть проекты</a>
+          <a href="#contact" class="btn btn--ghost">Связаться</a>
+        </div>
+        <ul class="stats">
+          <li><strong>5+</strong><span>лет опыта</span></li>
+          <li><strong>40+</strong><span>проектов</span></li>
+          <li><strong>25</strong><span>довольных клиентов</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section reveal" id="about">
+      <div class="container about">
+        <div class="about__photo" aria-hidden="true">В</div>
+        <div>
+          <h2 class="section__title">Обо мне</h2>
+          <p>Я веб-разработчик из Москвы. Начинал с вёрстки лендингов, а сейчас занимаюсь полноценными веб-приложениями — фронтендом, бэкендом и инфраструктурой.</p>
+          <p>Мне важно не просто написать код, а решить задачу: разобраться, что нужно пользователю, предложить простое решение и довести его до продакшена.</p>
+          <ul class="facts">
+            <li>📍 Москва, работаю удалённо</li>
+            <li>🎓 Высшее техническое образование</li>
+            <li>💼 Открыт к новым проектам</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="projects">
+      <div class="container">
+        <h2 class="section__title">Проекты</h2>
+        <div class="filters" role="tablist">
+          <button class="chip is-active" data-filter="all">Все</button>
+          <button class="chip" data-filter="web">Сайты</button>
+          <button class="chip" data-filter="app">Приложения</button>
+          <button class="chip" data-filter="design">Дизайн</button>
+        </div>
+        <div class="grid" id="projects-grid">
+          <article class="card" data-cat="web">
+            <div class="card__cover" style="--c1:#6366f1;--c2:#22d3ee">01</div>
+            <div class="card__body">
+              <h3>Лендинг кофейни</h3>
+              <p>Адаптивный сайт с меню, онлайн-бронью и картой. Конверсия в заявку выросла на 30%.</p>
+              <div class="tags"><span>HTML</span><span>CSS</span><span>JS</span></div>
+            </div>
+          </article>
+          <article class="card" data-cat="app">
+            <div class="card__cover" style="--c1:#f59e0b;--c2:#ef4444">02</div>
+            <div class="card__body">
+              <h3>Трекер задач</h3>
+              <p>Веб-приложение для команд: доски, дедлайны, уведомления и тёмная тема.</p>
+              <div class="tags"><span>React</span><span>Node.js</span><span>PostgreSQL</span></div>
+            </div>
+          </article>
+          <article class="card" data-cat="design">
+            <div class="card__cover" style="--c1:#10b981;--c2:#3b82f6">03</div>
+            <div class="card__body">
+              <h3>Редизайн интернет-магазина</h3>
+              <p>Новый UI-кит и упрощённое оформление заказа — на 2 шага меньше.</p>
+              <div class="tags"><span>Figma</span><span>UX</span></div>
+            </div>
+          </article>
+          <article class="card" data-cat="app">
+            <div class="card__cover" style="--c1:#ec4899;--c2:#8b5cf6">04</div>
+            <div class="card__body">
+              <h3>Telegram-бот для записи</h3>
+              <p>Запись клиентов к мастерам с напоминаниями и админ-панелью.</p>
+              <div class="tags"><span>Python</span><span>aiogram</span></div>
+            </div>
+          </article>
+          <article class="card" data-cat="web">
+            <div class="card__cover" style="--c1:#0ea5e9;--c2:#14b8a6">05</div>
+            <div class="card__body">
+              <h3>Корпоративный сайт</h3>
+              <p>Многостраничный сайт с блогом и CMS, оценка PageSpeed — 98.</p>
+              <div class="tags"><span>Next.js</span><span>Headless CMS</span></div>
+            </div>
+          </article>
+          <article class="card" data-cat="design">
+            <div class="card__cover" style="--c1:#f97316;--c2:#eab308">06</div>
+            <div class="card__body">
+              <h3>Фирменный стиль</h3>
+              <p>Логотип, палитра и шаблоны для соцсетей молодого бренда.</p>
+              <div class="tags"><span>Брендинг</span><span>Illustrator</span></div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="skills">
+      <div class="container">
+        <h2 class="section__title">Навыки</h2>
+        <div class="skills">
+          <div class="skill-group">
+            <h3>Фронтенд</h3>
+            <ul><li>HTML / CSS</li><li>JavaScript / TypeScript</li><li>React, Next.js</li><li>Адаптивная вёрстка</li></ul>
+          </div>
+          <div class="skill-group">
+            <h3>Бэкенд</h3>
+            <ul><li>Node.js</li><li>Python</li><li>PostgreSQL</li><li>REST API</li></ul>
+          </div>
+          <div class="skill-group">
+            <h3>Инструменты</h3>
+            <ul><li>Git, GitHub</li><li>Docker</li><li>Figma</li><li>CI/CD</li></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="contact">
+      <div class="container contact">
+        <div>
+          <h2 class="section__title">Давайте поработаем вместе</h2>
+          <p>Расскажите о вашей задаче — отвечу в течение дня.</p>
+          <ul class="links">
+            <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+            <li><a href="https://t.me/username" target="_blank" rel="noopener">Telegram</a></li>
+            <li><a href="https://github.com/" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </div>
+        <form class="form" id="contact-form" novalidate>
+          <label>Имя<input name="name" type="text" required placeholder="Как к вам обращаться"></label>
+          <label>Email<input name="email" type="email" required placeholder="you@example.com"></label>
+          <label>Сообщение<textarea name="message" rows="4" required placeholder="Коротко о проекте"></textarea></label>
+          <button class="btn btn--primary" type="submit">Отправить</button>
+          <p class="form__status" id="form-status" role="status"></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">© <span id="year"></span> Владимир. Все права защищены.</div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
