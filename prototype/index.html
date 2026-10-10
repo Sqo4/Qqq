@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>Силуэт 360</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen studio — 3D stage with turntable on the left, instrument panel (params / measurements / scan) on the right; stacks on phones. */
+:root {
+  --bg: #EDF0F3;
+  --panel: #F8FAFB;
+  --stage: #E1E6EB;
+  --ink: #16202B;
+  --muted: #5A6774;
+  --line: #D3DAE1;
+  --accent: #E0A314;      /* measuring-tape yellow */
+  --accent-ink: #8C6100;  /* accent for text on light surfaces */
+  --on-accent: #16202B;
+  --clay: #BDB0A4;
+  --ok: #2F8A5B;
+  --f-display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E141A; --panel: #141C24; --stage: #111921; --ink: #E4E9EE; --muted: #92A0AD;
+    --line: #25313C; --accent: #F0B829; --accent-ink: #F0B829; --on-accent: #111921;
+    --clay: #A39689; --ok: #5BC48C; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E141A; --panel: #141C24; --stage: #111921; --ink: #E4E9EE; --muted: #92A0AD;
+  --line: #25313C; --accent: #F0B829; --accent-ink: #F0B829; --on-accent: #111921;
+  --clay: #A39689; --ok: #5BC48C; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+.sliders { display: grid; gap: 14px; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.app { height: 100%; display: flex; flex-direction: column; padding-inline: 16px; padding-block: 12px; gap: 12px; box-sizing: border-box; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: 1.25rem; letter-spacing: -0.01em; margin: 0; }
+h1 span { color: var(--accent-ink); }
+.sub { color: var(--muted); font-size: 0.85rem; }
+.main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; }
+
+/* Stage */
+.stage { position: relative; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-height: 0; touch-action: none; }
+.stage canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.hud { position: absolute; pointer-events: none; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.hud-tl { top: 12px; left: 12px; display: grid; gap: 2px; }
+.hud-tl b { font-family: var(--f-display); font-weight: 500; font-size: 1.6rem; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.views { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tag { position: absolute; transform: translate(10px, -50%); font-family: var(--f-mono); font-size: 11px; white-space: nowrap; background: var(--accent); color: var(--on-accent); padding: 1px 6px; border-radius: 3px; pointer-events: none; }
+.dial { position: absolute; top: 10px; right: 10px; width: 76px; height: 76px; pointer-events: none; }
+
+button, .seg label { font: 500 12px/1 var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible + label, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.spacer { flex: 1; }
+
+/* Panel */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 12px 6px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.pane { padding: 16px; overflow-y: auto; display: grid; gap: 16px; align-content: start; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg input:checked + label { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.field { display: grid; gap: 6px; }
+.field .row { display: flex; justify-content: space-between; align-items: baseline; }
+.field output { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+td:last-child { text-align: right; font-family: var(--f-mono); }
+td small { color: var(--muted); font-family: var(--f-body); }
+.note { color: var(--muted); font-size: 12.5px; margin: 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stages li { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.stages li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--line); flex: none; }
+.stages li.run { color: var(--ink); }
+.stages li.run::before { border-color: var(--accent); background: var(--accent); animation: pulse 0.8s infinite alternate; }
+.stages li.done { color: var(--ink); }
+.stages li.done::before { border-color: var(--ok); background: var(--ok); }
+.stages li span { margin-left: auto; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+@keyframes pulse { to { opacity: .35; } }
+.ringwrap { display: flex; gap: 14px; align-items: center; }
+.ringwrap svg { width: 96px; height: 96px; flex: none; }
+.ringwrap .big { font-family: var(--f-display); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .main { grid-template-columns: 1fr; }
+  .stage { height: min(68vh, 540px); }
+  .panel { overflow: visible; }
+  .pane { overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { .stages li.run::before { animation: none; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Силуэт <span>360</span></h1>
+    <div class="sub">Прототип: параметрическая модель тела, обзор 360°, мерки и симуляция скана</div>
+  </header>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="hud hud-tl"><span>азимут камеры</span><b id="azOut">0°</b><span id="viewName">анфас</span></div>
+      <svg class="dial" viewBox="0 0 80 80" aria-hidden="true">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--line)" stroke-width="6"></circle>
+        <g id="dialTicks"></g>
+        <line id="dialNeedle" x1="40" y1="40" x2="40" y2="9" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"></line>
+        <circle cx="40" cy="40" r="4" fill="var(--ink)"></circle>
+      </svg>
+      <div id="tags"></div>
+      <div class="views">
+        <button data-view="0">Анфас</button>
+        <button data-view="45">¾</button>
+        <button data-view="90">Профиль</button>
+        <button data-view="180">Спина</button>
+        <span class="spacer"></span>
+        <button id="spinBtn" class="on" aria-pressed="true">Вращение</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="body">Тело</button>
+        <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
+        <button role="tab" aria-selected="false" data-tab="scan">Скан 360</button>
+      </div>
+
+      <div class="pane" data-pane="body">
+        <div class="field">
+          <span class="label">Пресет</span>
+          <div class="seg">
+            <input type="radio" name="preset" id="pr-m" value="m" checked><label for="pr-m">Мужской</label>
+            <input type="radio" name="preset" id="pr-f" value="f"><label for="pr-f">Женский</label>
+            <input type="radio" name="preset" id="pr-a" value="a"><label for="pr-a">Атлетичный</label>
+          </div>
+        </div>
+        <div id="sliders" class="sliders"></div>
+        <div class="field">
+          <span class="label">Отображение</span>
+          <div class="seg">
+            <input type="radio" name="mode" id="md-clay" value="clay" checked><label for="md-clay">Глина</label>
+            <input type="radio" name="mode" id="md-wire" value="wire"><label for="md-wire">Сетка</label>
+            <input type="radio" name="mode" id="md-pts" value="points"><label for="md-pts">Облако точек</label>
+          </div>
+        </div>
+        <div class="seg">
+          <input type="checkbox" id="ringsChk" checked><label for="ringsChk">Показывать обхваты</label>
+        </div>
+      </div>
+
+      <div class="pane" data-pane="meas" hidden>
+        <span class="label">Снятые мерки</span>
+        <table><tbody id="measTable"></tbody></table>
+        <p class="note">Длины считаются по пропорциям от роста; в продукте их даёт подогнанная модель SMPL-X по геодезическим линиям на поверхности.</p>
+        <span class="label">Экспорт</span>
+        <div class="chips">
+          <button disabled>GLB</button><button disabled>USDZ</button><button disabled>OBJ</button><button disabled>JSON мерок</button>
+        </div>
+        <p class="note">В прототипе экспорт отключён.</p>
+      </div>
+
+      <div class="pane" data-pane="scan" hidden>
+        <div class="ringwrap">
+          <svg viewBox="0 0 100 100" id="frameRing" aria-hidden="true"></svg>
+          <div><div class="big" id="frameOut">0 / 36</div><div class="note">кадров, шаг 10°</div></div>
+        </div>
+        <p class="note">Человек стоит в A-позе, телефон обходит его по кругу (или человек поворачивается на месте). Каждые 10° сохраняется кадр с глубиной LiDAR, если она есть.</p>
+        <ul class="stages" id="stages"></ul>
+        <button class="primary" id="scanBtn">Запустить симуляцию скана</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Parameters ---------- */
+  const PRESETS = {
+    m: { height: 178, chest: 100, waist: 84, hips: 98, shoulders: 45 },
+    f: { height: 166, chest: 90, waist: 70, hips: 100, shoulders: 37 },
+    a: { height: 184, chest: 112, waist: 80, hips: 100, shoulders: 50 },
+  };
+  const SLIDERS = [
+    { k: 'height', name: 'Рост', min: 145, max: 205 },
+    { k: 'chest', name: 'Обхват груди', min: 76, max: 130 },
+    { k: 'waist', name: 'Обхват талии', min: 56, max: 120 },
+    { k: 'hips', name: 'Обхват бёдер', min: 78, max: 130 },
+    { k: 'shoulders', name: 'Ширина плеч', min: 32, max: 54 },
+  ];
+  const P = { ...PRESETS.m };
+  let mode = 'clay', showRings = true;
+
+  const sl = $('#sliders');
+  SLIDERS.forEach(s => {
+    const f = document.createElement('div');
+    f.className = 'field';
+    f.innerHTML = `<div class="row"><label for="s-${s.k}">${s.name}</label><output id="o-${s.k}"></output></div>
+      <input type="range" id="s-${s.k}" min="${s.min}" max="${s.max}" step="1">`;
+    sl.appendChild(f);
+    $(`#s-${s.k}`, f).addEventListener('input', e => { P[s.k] = +e.target.value; syncUI(); rebuild(); });
+  });
+  function syncUI() {
+    SLIDERS.forEach(s => { $(`#s-${s.k}`).value = P[s.k]; $(`#o-${s.k}`).textContent = P[s.k] + ' см'; });
+    renderMeasures();
+  }
+  $$('input[name=preset]').forEach(r => r.addEventListener('change', () => { Object.assign(P, PRESETS[r.value]); syncUI(); rebuild(); }));
+  $$('input[name=mode]').forEach(r => r.addEventListener('change', () => { mode = r.value; applyMode(); }));
+  $('#ringsChk').addEventListener('change', e => { showRings = e.target.checked; rings.visible = showRings; });
+
+  /* ---------- Tabs ---------- */
+  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+    $$('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
+    $$('.pane[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  }));
+
+  /* ---------- Three.js scene ---------- */
+  const stage = $('#stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 50);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f96, 0.75));
+  const key = new THREE.DirectionalLight(0xffffff, 0.8); key.position.set(2, 3, 2.5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(-2.5, 2, -2); scene.add(rim);
+
+  const clayMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0, side: THREE.DoubleSide });
+  const wireMat = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, opacity: 0.55 });
+  const hiddenMat = new THREE.MeshBasicMaterial({ visible: false });
+  const ptsMat = new THREE.PointsMaterial({ size: 0.007, sizeAttenuation: true, transparent: true, opacity: 1 });
+  const ringMat = new THREE.MeshBasicMaterial();
+
+  // Turntable with degree scale
+  const ttCanvas = document.createElement('canvas'); ttCanvas.width = ttCanvas.height = 1024;
+  const ttTex = new THREE.CanvasTexture(ttCanvas); ttTex.anisotropy = 4;
+  const turntable = new THREE.Mesh(new THREE.CircleGeometry(0.62, 128), new THREE.MeshBasicMaterial({ map: ttTex, transparent: true }));
+  turntable.rotation.x = -Math.PI / 2; turntable.position.y = 0.001; scene.add(turntable);
+  function drawTurntable() {
+    const c = ttCanvas.getContext('2d'), W = 1024, R = 500;
+    c.clearRect(0, 0, W, W);
+    c.fillStyle = css('--panel'); c.beginPath(); c.arc(512, 512, R, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = css('--line'); c.lineWidth = 3; c.stroke();
+    c.strokeStyle = css('--muted'); c.fillStyle = css('--muted');
+    c.font = '500 26px "IBM Plex Mono", monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let d = 0; d < 360; d += 5) {
+      // 0° faces the front (+Z), counted clockwise seen from above
+      const a = Math.PI / 2 - d * Math.PI / 180;
+      const len = d % 30 === 0 ? 38 : d % 10 === 0 ? 22 : 12;
+      c.lineWidth = d % 30 === 0 ? 4 : 2;
+      c.beginPath();
+      c.moveTo(512 + Math.cos(a) * (R - 6), 512 + Math.sin(a) * (R - 6));
+      c.lineTo(512 + Math.cos(a) * (R - 6 - len), 512 + Math.sin(a) * (R - 6 - len));
+      c.stroke();
+      if (d % 30 === 0) c.fillText(d + '°', 512 + Math.cos(a) * (R - 72), 512 + Math.sin(a) * (R - 72));
+    }
+    ttTex.needsUpdate = true;
+  }
+
+  /* ---------- Procedural body ---------- */
+  const SX = 1.15, SZ = 0.8; // torso cross-section is an ellipse, roughly same circumference as a circle of radius r
+  const rOf = (cm) => cm / 100 / (2 * Math.PI);
+  const V2 = THREE.Vector2;
+  let body = new THREE.Group(), rings = new THREE.Group();
+  scene.add(body, rings);
+  const meshes = [];
+
+  function smoothLathe(pts, seg = 48, samples = 64) {
+    return new THREE.LatheGeometry(new THREE.SplineCurve(pts).getPoints(samples), seg);
+  }
+  // Capsule-like limb hanging down from origin, radii listed top → bottom
+  function limb(L, radii) {
+    const n = radii.length, rt = radii[0], rb = radii[n - 1], pts = [];
+    pts.push(new V2(0.0001, -L - rb * 0.8));
+    pts.push(new V2(rb * 0.7, -L - rb * 0.55));
+    for (let i = n - 1; i >= 0; i--) pts.push(new V2(radii[i], -L * i / (n - 1)));
+    pts.push(new V2(rt * 0.7, rt * 0.55));
+    pts.push(new V2(0.0001, rt * 0.8));
+    return smoothLathe(pts, 32, 48);
+  }
+  function add(parent, geo, x = 0, y = 0, z = 0) {
+    const m = new THREE.Mesh(geo, clayMat);
+    m.position.set(x, y, z);
+    const p = new THREE.Points(geo, ptsMat); p.visible = false; m.add(p);
+    parent.add(m); meshes.push(m);
+    return m;
+  }
+  function ellipsoid(parent, rx, ry, rz, x, y, z) {
+    const m = add(parent, new THREE.SphereGeometry(1, 40, 28), x, y, z);
+    m.scale.set(rx, ry, rz); return m;
+  }
+
+  function rebuild() {
+    // dispose old
+    meshes.forEach(m => m.geometry.dispose()); meshes.length = 0;
+    scene.remove(body); body = new THREE.Group(); scene.add(body);
+    rings.children.forEach(r => r.geometry.dispose()); rings.clear();
+
+    const h = P.height / 100;
+    const cr = rOf(P.chest), wr = rOf(P.waist), hr = rOf(P.hips);
+    const sw = P.shoulders / 100;
+    const k = Math.sqrt(P.chest / 98);
+    const nr = 0.058 * k;
+
+    // Torso (lathe profile r,y from crotch to neck base)
+    const tp = [
+      [0.0001, 0.452], [hr * 0.62, 0.458], [hr * 0.93, 0.478], [hr, 0.50], [(hr + wr) / 2 * 1.02, 0.555],
+      [wr, 0.61], [(wr + cr) / 2, 0.665], [cr, 0.72], [cr * 0.97, 0.77], [cr * 0.84, 0.805],
+      [cr * 0.55, 0.832], [nr * 1.15, 0.845], [0.0001, 0.852],
+    ].map(([r, y]) => new V2(r, y * h));
+    const torso = add(body, smoothLathe(tp, 64, 96));
+    torso.scale.set(SX, 1, SZ);
+
+    // Neck + head
+    add(body, limb(0.085 * h, [nr, nr * 1.08]), 0, 0.905 * h, 0.004 * h);
+    ellipsoid(body, 0.044 * h, 0.064 * h, 0.054 * h, 0, h - 0.064 * h, 0.006 * h);
+
+    // Shoulder girdle bridging torso and arms
+    const armTop = 0.05 * k;
+    const half = sw / 2 - armTop * 0.45;
+    const girdle = add(body, limb(half * 2, [0.046 * k, 0.05 * k, 0.046 * k]), -half, 0.808 * h, -0.004 * h);
+    girdle.rotation.z = Math.PI / 2; girdle.scale.z = 0.72;
+
+    // Arms (A-pose)
+    [-1, 1].forEach(side => {
+      const sh = new THREE.Group();
+      sh.position.set(side * half, 0.808 * h, -0.004 * h);
+      sh.rotation.z = side * 0.2;
+      body.add(sh);
+      ellipsoid(sh, armTop * 1.12, armTop * 1.12, armTop * 1.0, 0, 0, 0);
+      const ua = 0.186 * h;
+      add(sh, limb(ua, [armTop, armTop * 0.92, 0.036 * k]));
+      const el = new THREE.Group(); el.position.y = -ua; el.rotation.z = -side * 0.06; el.rotation.x = 0.08; sh.add(el);
+      const fa = 0.146 * h;
+      add(el, limb(fa, [0.037 * k, 0.038 * k, 0.026 * k]));
+      ellipsoid(el, 0.018 * h, 0.05 * h, 0.03 * h, 0, -fa - 0.048 * h, 0.004 * h);
+    });
+
+    // Legs
+    const kneeR = 0.021 * h * Math.sqrt(P.hips / 98), calfR = 0.032 * h * Math.sqrt(P.hips / 98), ankR = 0.0125 * h;
+    const thighR = hr * 0.56;
+    [-1, 1].forEach(side => {
+      const hip = new THREE.Group();
+      hip.position.set(side * hr * SX * 0.47, 0.48 * h, 0);
+      hip.rotation.z = side * 0.035;
+      body.add(hip);
+      const th = 0.205 * h;
+      add(hip, limb(th, [thighR, thighR * 0.86, thighR * 0.68, kneeR]));
+      const kn = new THREE.Group(); kn.position.y = -th; kn.rotation.z = -side * 0.035; hip.add(kn);
+      const sh = 0.232 * h;
+      add(kn, limb(sh, [kneeR, calfR, calfR * 0.8, ankR * 1.15, ankR]), 0, 0, -0.004 * h);
+      const foot = ellipsoid(kn, 0.027 * h, 0.022 * h, 0.072 * h, 0, -sh - 0.022 * h, 0.035 * h);
+      foot.rotation.y = side * 0.08;
+    });
+
+    // Measurement rings at chest / waist / hips
+    const ringDefs = [['Грудь', P.chest, cr, 0.72], ['Талия', P.waist, wr, 0.61], ['Бёдра', P.hips, hr, 0.50]];
+    ringDefs.forEach(([name, cm, r, y]) => {
+      const pts = [];
+      for (let i = 0; i < 96; i++) {
+        const a = i / 96 * Math.PI * 2;
+        pts.push(new THREE.Vector3(Math.cos(a) * r * SX * 1.035, y * h, Math.sin(a) * r * SZ * 1.035));
+      }
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 120, 0.0038, 6, true), ringMat);
+      m.userData = { label: `${name} ${cm} см`, anchor: new THREE.Vector3(r * SX * 1.05, y * h, 0) };
+      rings.add(m);
+    });
+    rings.visible = showRings;
+    buildTags();
+    applyMode();
+    target.y = h * 0.52;
+  }
+
+  function applyMode() {
+    meshes.forEach(m => {
+      m.material = mode === 'clay' ? clayMat : mode === 'wire' ? wireMat : hiddenMat;
+      m.children[0].visible = mode === 'points';
+    });
+  }
+
+  function applyTheme() {
+    renderer.setClearColor(new THREE.Color(css('--stage')), 1);
+    clayMat.color.set(css('--clay'));
+    wireMat.color.set(css('--ink'));
+    ptsMat.color.set(css('--ink'));
+    ringMat.color.set(css('--accent'));
+    drawTurntable();
+    drawDialTicks();
+  }
+
+  /* ---------- Labels projected onto the rings ---------- */
+  const tagBox = $('#tags');
+  function buildTags() {
+    tagBox.innerHTML = '';
+    rings.children.forEach(r => { const d = document.createElement('div'); d.className = 'tag'; d.textContent = r.userData.label; tagBox.appendChild(d); r.userData.el = d; });
+  }
+  const tmp = new THREE.Vector3();
+  function updateTags() {
+    const w = stage.clientWidth, hgt = stage.clientHeight;
+    rings.children.forEach(r => {
+      const el = r.userData.el; if (!el) return;
+      el.hidden = !showRings || scanning;
+      // put the label on whichever side of the body faces the camera's right
+      tmp.copy(r.userData.anchor);
+      const sideX = Math.cos(az), sideZ = -Math.sin(az);
+      tmp.set(sideX * r.userData.anchor.x, r.userData.anchor.y, sideZ * r.userData.anchor.x * SZ / SX);
+      tmp.project(camera);
+      el.style.left = ((tmp.x + 1) / 2 * w) + 'px';
+      el.style.top = ((1 - tmp.y) / 2 * hgt) + 'px';
+    });
+  }
+
+  /* ---------- Orbit camera (custom, touch-friendly) ---------- */
+  let az = 0.55, elv = 0.1, dist = 4.4, spin = !reduceMotion, animTo = null;
+  const target = new THREE.Vector3(0, 0.9, 0);
+  const ptrs = new Map(); let pinch0 = 0, dist0 = dist;
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); animTo = null;
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = dist; } });
+  cv.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId); if (!p) return;
+    if (ptrs.size === 1) {
+      az -= (e.clientX - p.x) * 0.008;
+      elv = Math.max(-0.35, Math.min(1.1, elv + (e.clientY - p.y) * 0.005));
+    }
+    p.x = e.clientX; p.y = e.clientY;
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); dist = clampD(dist0 * pinch0 / d); }
+  });
+  const up = e => ptrs.delete(e.pointerId);
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); dist = clampD(dist * (1 + e.deltaY * 0.001)); }, { passive: false });
+  const clampD = d => Math.max(1.6, Math.min(8, d));
+
+  function setSpin(v) { spin = v; const b = $('#spinBtn'); b.classList.toggle('on', v); b.setAttribute('aria-pressed', v); }
+  $('#spinBtn').addEventListener('click', () => setSpin(!spin));
+  $$('[data-view]').forEach(b => b.addEventListener('click', () => {
+    setSpin(false);
+    const want = +b.dataset.view * Math.PI / 180;
+    let d = ((want - az) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    animTo = az + d;
+  }));
+
+  const VIEWS = [[0, 'анфас'], [45, '¾ справа'], [90, 'профиль справа'], [135, '¾ сзади'], [180, 'спина'], [225, '¾ сзади'], [270, 'профиль слева'], [315, '¾ слева'], [360, 'анфас']];
+  function drawDialTicks() {
+    const g = $('#dialTicks'); g.innerHTML = '';
+    for (let d = 0; d < 360; d += 30) {
+      const a = d * Math.PI / 180, r1 = 31, r2 = d % 90 ? 35 : 37;
+      g.insertAdjacentHTML('beforeend', `<line x1="${40 + Math.sin(a) * r1}" y1="${40 - Math.cos(a) * r1}" x2="${40 + Math.sin(a) * r2}" y2="${40 - Math.cos(a) * r2}" stroke="var(--muted)" stroke-width="${d % 90 ? 1 : 2}"></line>`);
+    }
+  }
+
+  /* ---------- Scan simulation ---------- */
+  const STAGES = [
+    ['Съёмка 36 кадров по кругу', 'клиент'],
+    ['Сегментация человека (SAM 2)', 'GPU'],
+    ['Позы камер + глубина', 'GPU'],
+    ['Подгонка параметрической модели', 'GPU'],
+    ['Текстура и запекание', 'GPU'],
+    ['Мерки и экспорт GLB/USDZ', 'CPU'],
+  ];
+  const stList = $('#stages');
+  STAGES.forEach(([n, w]) => stList.insertAdjacentHTML('beforeend', `<li>${n}<span>${w}</span></li>`));
+  const ring = $('#frameRing');
+  for (let i = 0; i < 36; i++) {
+    const a0 = (i / 36) * Math.PI * 2 + 0.03, a1 = ((i + 1) / 36) * Math.PI * 2 - 0.03, R = 44, r = 34;
+    const p = (a, rad) => `${50 + Math.sin(a) * rad} ${50 - Math.cos(a) * rad}`;
+    ring.insertAdjacentHTML('beforeend', `<path d="M${p(a0, R)} A${R} ${R} 0 0 1 ${p(a1, R)} L${p(a1, r)} A${r} ${r} 0 0 0 ${p(a0, r)} Z" fill="var(--line)"></path>`);
+  }
+  let scanning = false;
+  $('#scanBtn').addEventListener('click', async () => {
+    if (scanning) return;
+    scanning = true; $('#scanBtn').disabled = true;
+    const prevMode = mode;
+    const segs = $$('path', ring); segs.forEach(s => s.setAttribute('fill', 'var(--line)'));
+    const lis = $$('li', stList); lis.forEach(l => l.className = '');
+    mode = 'points'; applyMode(); rings.visible = false; ptsMat.opacity = 0.1;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    lis[0].className = 'run'; setSpin(false);
+    const start = az;
+    for (let i = 0; i < 36; i++) {
+      animTo = start + (i + 1) / 36 * Math.PI * 2;
+      segs[i].setAttribute('fill', 'var(--accent)');
+      $('#frameOut').textContent = `${i + 1} / 36`;
+      ptsMat.opacity = 0.1 + 0.6 * (i + 1) / 36;
+      await wait(70);
+    }
+    lis[0].className = 'done';
+    for (let s = 1; s < lis.length; s++) {
+      lis[s].className = 'run';
+      await wait(650);
+      if (s === 3) { ptsMat.opacity = 1; }
+      lis[s].className = 'done';
+    }
+    mode = prevMode === 'points' ? 'clay' : prevMode;
+    $(`input[name=mode][value=${mode}]`).checked = true;
+    applyMode(); rings.visible = showRings; ptsMat.opacity = 1;
+    scanning = false; $('#scanBtn').disabled = false; $('#scanBtn').textContent = 'Повторить симуляцию';
+    setSpin(!reduceMotion);
+  });
+
+  /* ---------- Measurements ---------- */
+  function renderMeasures() {
+    const h = P.height;
+    const rows = [
+      ['Рост', h], ['Обхват груди', P.chest], ['Обхват талии', P.waist], ['Обхват бёдер', P.hips],
+      ['Ширина плеч', P.shoulders], ['Длина руки', Math.round(h * 0.38)],
+      ['Длина ноги по внутр. шву', Math.round(h * 0.455)], ['Обхват шеи', Math.round(36.5 * Math.sqrt(P.chest / 98))],
+    ];
+    const whr = (P.waist / P.hips).toFixed(2);
+    $('#measTable').innerHTML = rows.map(([n, v]) => `<tr><td>${n}</td><td>${v} см</td></tr>`).join('') +
+      `<tr><td>Талия / бёдра <small>(WHR)</small></td><td>${whr}</td></tr>`;
+  }
+
+  /* ---------- Loop ---------- */
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(0.05, (t - last) / 1000); last = t;
+    if (animTo !== null) { az += (animTo - az) * Math.min(1, dt * 7); if (Math.abs(animTo - az) < 0.002) { az = animTo; animTo = null; } }
+    else if (spin && ptrs.size === 0) az += dt * 0.35;
+    camera.position.set(target.x + dist * Math.cos(elv) * Math.sin(az), target.y + dist * Math.sin(elv), target.z + dist * Math.cos(elv) * Math.cos(az));
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    const deg = Math.round(((az * 180 / Math.PI) % 360 + 360) % 360) % 360;
+    $('#azOut').textContent = deg + '°';
+    $('#viewName').textContent = VIEWS.reduce((b, v) => Math.abs(v[0] - deg) < Math.abs(b[0] - deg) ? v : b)[1];
+    $('#dialNeedle').setAttribute('transform', `rotate(${deg} 40 40)`);
+    updateTags();
+    requestAnimationFrame(frame);
+  }
+
+  // Theme: follow OS preference and the viewer's explicit toggle
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (document.fonts) document.fonts.ready.then(drawTurntable);
+
+  syncUI();
+  rebuild();
+  applyTheme();
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
