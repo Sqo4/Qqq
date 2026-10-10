@@ -112,6 +112,33 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
 .pose-del { position: absolute; top: 3px; right: 3px; padding: 2px 7px; border: 0; background: transparent; color: var(--muted); font-size: 15px; }
 .chips button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .divider { height: 1px; background: var(--line); }
+#avPreview { width: 100%; height: auto; aspect-ratio: 1; border-radius: 10px; display: block; background: var(--stage); }
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.sw { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
+.sw.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--accent); }
+.looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.plats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.plat { display: grid; justify-items: center; gap: 3px; padding: 6px 2px; background: transparent; border-color: transparent; }
+.plat:hover { border-color: var(--line); }
+.plat canvas { width: 100%; max-width: 64px; height: auto; aspect-ratio: 1; border-radius: 50%; }
+.plat span { font-size: 11px; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
+.plat small { font: 400 10px var(--f-mono); color: var(--muted); }
+.stks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.stks:empty { display: none; }
+.stk { padding: 4px; background: repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.stk canvas { width: 100%; height: auto; display: block; }
+select { font: 400 13px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; flex: 1; min-width: 0; }
+.il { display: grid; gap: 8px; }
+.il-card { display: grid; gap: 2px; padding: 12px; border-radius: 8px; background: var(--ink); color: var(--panel); }
+.il-card b { font-family: var(--f-display); font-size: 1.05rem; }
+.bio { display: grid; gap: 4px; padding-block: 8px; border-bottom: 1px solid var(--line); }
+.bio p { margin: 0; overflow-wrap: anywhere; }
+.bio small { color: var(--muted); font: 400 10.5px var(--f-mono); }
+.bio .copy { justify-self: start; padding: 5px 8px; font-size: 11px; }
+.chatlog { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.msg { max-width: 85%; padding: 7px 10px; border-radius: 10px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.msg.ai { background: var(--panel); border: 1px solid var(--line); justify-self: start; }
+.msg.me { background: var(--accent); color: var(--on-accent); justify-self: end; }
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
 .thumbs:empty { display: none; }
 .thumbs canvas { width: 100%; height: auto; border-radius: 3px; display: block; }
@@ -137,7 +164,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 <div class="app">
   <header>
     <h1>Силуэт <span>360</span></h1>
-    <div class="sub">Прототип: параметрическая модель тела, обзор 360°, позы, мерки и 3D по фото</div>
+    <div class="sub">Прототип: модель тела 360°, позы, 3D по фото, аватар и искусственная личность для соцсетей</div>
   </header>
 
   <div class="main">
@@ -164,8 +191,9 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-tab="body">Тело</button>
         <button role="tab" aria-selected="false" data-tab="pose">Позы</button>
-        <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
         <button role="tab" aria-selected="false" data-tab="scan">Фото → 3D</button>
+        <button role="tab" aria-selected="false" data-tab="avatar">Аватар ИЛ</button>
+        <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
       </div>
 
       <div class="pane" data-pane="body">
@@ -217,6 +245,58 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <button id="applyJson" hidden>Применить JSON</button>
         <p class="note" id="poseMsg" aria-live="polite"></p>
         <p class="note">Свои позы хранятся в этом браузере.</p>
+      </div>
+
+      <div class="pane" data-pane="avatar" id="avPane" hidden>
+        <canvas id="avPreview" width="720" height="720" aria-label="Предпросмотр аватара"></canvas>
+        <div class="field"><span class="label">Стиль</span><div class="chips" id="avStyle"></div></div>
+        <div class="field"><span class="label">Кадр</span><div class="chips" id="avFrame"></div></div>
+        <div class="field">
+          <div class="row"><label for="avAngle">Поворот к камере</label><output id="avAngleOut"></output></div>
+          <input type="range" id="avAngle" min="-60" max="60" step="1">
+        </div>
+        <div class="field"><span class="label">Фон</span><div class="swatches" id="avBg"></div></div>
+        <div class="looks">
+          <div class="field"><span class="label">Кожа</span><div class="swatches" id="avSkin"></div></div>
+          <div class="field"><span class="label">Волосы</span><div class="swatches" id="avHair"></div></div>
+          <div class="field"><span class="label">Верх</span><div class="swatches" id="avTop"></div></div>
+          <div class="field"><span class="label">Низ</span><div class="swatches" id="avBottom"></div></div>
+        </div>
+        <p class="note">Поза берётся с вкладки «Позы», тело — с «Тела» или из «Фото → 3D».</p>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="label">Аватарки для соцсетей</span>
+          <p class="note">Нажмите на сеть, чтобы сохранить PNG в нужном размере. Сеть сама обрежет картинку в круг.</p>
+        </div>
+        <div class="plats" id="avPlatforms"></div>
+        <button class="primary" id="avZip">Скачать пакет для всех сетей (.zip)</button>
+        <div class="field">
+          <span class="label">Стикеры</span>
+          <p class="note">6 поз с белой обводкой и прозрачным фоном, 512×512 — формат Telegram. Подписи появятся после создания ИЛ.</p>
+        </div>
+        <div class="stks" id="avStickers"></div>
+        <button id="avStickersBtn">Нарисовать стикеры</button>
+        <p class="note" id="avMsg" aria-live="polite"></p>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="label">Искусственная личность (ИЛ)</span>
+          <p class="note">Характер для аватара: Claude напишет био под каждую сеть, приветствие и подписи к стикерам. С ИЛ можно поговорить ниже.</p>
+        </div>
+        <div class="field"><label for="ilName" class="label">Имя или ник</label><input type="text" id="ilName" maxlength="32" placeholder="Например, Вова 3D"></div>
+        <div class="field"><span class="label">Характер, до трёх черт</span><div class="chips" id="ilTraits"></div></div>
+        <div class="field"><label for="ilAbout" class="label">О себе и интересы</label><textarea id="ilAbout" rows="3" maxlength="400" placeholder="Чем занимаетесь, что любите, о чём будете писать"></textarea></div>
+        <div class="rowc">
+          <select id="ilTone" aria-label="Обращение"><option>на «ты»</option><option>на «вы»</option></select>
+          <select id="ilLang" aria-label="Язык"><option>русский</option><option>английский</option><option>русский и английский</option></select>
+        </div>
+        <button class="primary" id="ilGen">Создать ИЛ</button>
+        <p class="note" id="ilMsg" aria-live="polite"></p>
+        <div id="ilOut" class="il" hidden></div>
+        <div id="ilChat" class="field" hidden>
+          <span class="label">Поговорить с ИЛ</span>
+          <div class="chatlog" id="chatLog"></div>
+          <form id="chatForm" class="rowc"><input type="text" id="chatInput" placeholder="Напишите сообщение" maxlength="500" autocomplete="off"><button class="primary" type="submit">Отправить</button></form>
+        </div>
       </div>
 
       <div class="pane" data-pane="meas" hidden>
@@ -276,6 +356,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
@@ -321,6 +402,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     $$('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
     $$('.pane[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
     poseTabOpen = b.dataset.tab === 'pose'; applyMode();
+    avOpen = b.dataset.tab === 'avatar'; if (avOpen) refreshAvatar();
   }));
 
   /* ---------- Three.js scene ---------- */
@@ -339,6 +421,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const clayMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0, side: THREE.DoubleSide });
   const wireMat = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, opacity: 0.55 });
   const hiddenMat = new THREE.MeshBasicMaterial({ visible: false });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: '#1d1b22', roughness: 0.25 });
+  const PART_OF = { root: 'bottom', hipL: 'bottom', hipR: 'bottom', knL: 'bottom', knR: 'bottom', anL: 'shoes', anR: 'shoes', spine: 'top', shL: 'top', shR: 'top', elL: 'skin', elR: 'skin', neck: 'skin' };
   const ptsMat = new THREE.PointsMaterial({ size: 0.007, sizeAttenuation: true, transparent: true, opacity: 1 });
   const ringMat = new THREE.MeshBasicMaterial();
   const selMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0, side: THREE.DoubleSide, emissiveIntensity: 0.35 });
@@ -397,6 +481,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     const m = new THREE.Mesh(geo, clayMat);
     m.position.set(x, y, z);
     m.userData.joint = curJ;
+    m.userData.part = PART_OF[curJ];
     const p = new THREE.Points(geo, ptsMat); p.visible = false; m.add(p);
     parent.add(m); meshes.push(m);
     return m;
@@ -406,7 +491,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     m.scale.set(rx, ry, rz); return m;
   }
   function joint(key, parent, x, y, z) {
-    const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); J[key] = g; return g;
+    const g = new THREE.Group(); g.name = key; g.position.set(x, y, z); parent.add(g); J[key] = g; return g;
   }
   function girthRing(parent, name, cm, r, yAbs, yParent) {
     const pts = [];
@@ -462,7 +547,18 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     curJ = 'neck';
     const neck = joint('neck', spine, 0, yN - yS, 0.004 * h);
     add(neck, limb(0.085 * h, [nr, nr * 1.08]), 0, 0.06 * h, 0);
-    ellipsoid(neck, 0.044 * h, 0.064 * h, 0.054 * h, 0, 0.091 * h, 0.002 * h);
+    ellipsoid(neck, 0.044 * h, 0.06 * h, 0.054 * h, 0, 0.098 * h, -0.004 * h);                // cranium
+    ellipsoid(neck, 0.034 * h, 0.04 * h, 0.038 * h, 0, 0.07 * h, 0.008 * h);                   // jaw and cheeks
+    ellipsoid(neck, 0.03 * h, 0.006 * h, 0.008 * h, 0, 0.108 * h, 0.041 * h);                 // brow ridge
+    const nose = ellipsoid(neck, 0.007 * h, 0.012 * h, 0.009 * h, 0, 0.091 * h, 0.05 * h);
+    nose.rotation.x = -0.25;
+    [-1, 1].forEach(sd => {
+      ellipsoid(neck, 0.006 * h, 0.016 * h, 0.011 * h, sd * 0.044 * h, 0.093 * h, -0.002 * h); // ear
+      const eye = ellipsoid(neck, 0.0068 * h, 0.0068 * h, 0.0068 * h, sd * 0.0165 * h, 0.1 * h, 0.0445 * h);
+      eye.userData.part = 'eye';
+    });
+    const hair = add(neck, new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.52), 0, 0.1 * h, -0.008 * h);
+    hair.scale.set(0.047 * h, 0.064 * h, 0.058 * h); hair.rotation.x = -0.32; hair.userData.part = 'hair';
 
     // Arms (L = character's left = +x)
     [['L', 1], ['R', -1]].forEach(([s, side]) => {
@@ -506,7 +602,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   function applyMode() {
     meshes.forEach(m => {
       const sel = poseTabOpen && m.userData.joint === selJoint;
-      m.material = mode === 'clay' ? (sel ? selMat : clayMat) : mode === 'wire' ? (sel ? selWireMat : wireMat) : hiddenMat;
+      m.material = mode === 'clay' ? (sel ? selMat : m.userData.part === 'eye' ? eyeMat : clayMat) : mode === 'wire' ? (sel ? selWireMat : wireMat) : hiddenMat;
       m.children[0].visible = mode === 'points';
     });
   }
@@ -1166,10 +1262,10 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     floor.rotation.x = -Math.PI / 2; sc.add(floor);
     sc.add(new THREE.HemisphereLight(0xffffff, 0x777777, 0.7));
     const flash = new THREE.DirectionalLight(0xffffff, 0.65); sc.add(flash, flash.target);
-    const outfit = { root: '#2d3440', hipL: '#2d3440', hipR: '#2d3440', knL: '#2d3440', knR: '#2d3440', anL: '#5b3a28', anR: '#5b3a28', spine: '#3f72a6', shL: '#3f72a6', shR: '#3f72a6', elL: '#9a5f45', elR: '#9a5f45', neck: '#9a5f45' };
+    const outfit = { bottom: '#2d3440', shoes: '#5b3a28', top: '#3f72a6', skin: '#9a5f45', eye: '#1d1b22', hair: '#3a2a20' };
     const mats = {}; Object.entries(outfit).forEach(([k, c]) => { mats[k] = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }); });
     const clone = body.clone(true); clone.visible = true;
-    clone.traverse(o => { if (o.isPoints) o.visible = false; else if (o.isMesh) { if (o.material === ringMat) o.visible = false; else o.material = mats[o.userData.joint] || mats.spine; } });
+    clone.traverse(o => { if (o.isPoints) o.visible = false; else if (o.isMesh) { if (o.material === ringMat) o.visible = false; else o.material = mats[o.userData.part] || mats.top; } });
     sc.add(clone);
     const half = 1.06, cam = new THREE.OrthographicCamera(-half * W / Hpx, half * W / Hpx, half, -half, 0.1, 30);
     photos = [];
@@ -1189,6 +1285,371 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     await build();
     photoMsg('Демо готово: это результат по 50 снимкам. Загрузите свои фото, чтобы проверить на реальном человеке.');
   });
+
+  /* ---------- Avatar studio: renders for every network + stickers ---------- */
+  const PALETTE = {
+    skin: ['#f1c7a8', '#d9a07c', '#b07650', '#8a5637', '#5e3a26'],
+    hair: ['#2b211b', '#6b4a2e', '#c9a46a', '#8e2f1f', '#d7d3cc'],
+    top: ['#3f72a6', '#e05a47', '#2f8a5b', '#f2b829', '#222831', '#f4f4f4'],
+    bottom: ['#2d3440', '#5b6b7f', '#7a5230', '#1f1f1f', '#c9c2b5'],
+  };
+  const BGS = [
+    ['#ffd36e', '#ff7a59'], ['#8fd8ff', '#3d5afe'], ['#c7f2cf', '#2e9e6b'],
+    ['#ff9ad5', '#8a5cff'], ['#3a2f5b', '#12131c'], ['#f6f6f8', '#cfd3da'],
+  ];
+  const STYLES = [
+    ['studio', 'Студия'], ['toon', 'Мультяшный'], ['marble', 'Мрамор'], ['gold', 'Золото'], ['neon', 'Неон'], ['clay', 'Глина'], ['scan', 'Скан из фото'],
+  ];
+  const FRAMES = [['portrait', 'Портрет'], ['bust', 'По пояс'], ['full', 'В рост']];
+  const PLATFORMS = [
+    ['Telegram', 640, 'circle'], ['WhatsApp', 640, 'circle'], ['Instagram', 1080, 'circle'], ['ВКонтакте', 800, 'circle'],
+    ['TikTok', 720, 'circle'], ['YouTube', 800, 'circle'], ['X', 400, 'circle'], ['Discord', 512, 'circle'],
+    ['LinkedIn', 800, 'circle'], ['Facebook', 720, 'circle'], ['Одноклассники', 600, 'circle'], ['Viber', 720, 'circle'],
+  ];
+  const STICKER_POSES = ['Приветствие', 'Победа', 'Задумчивость', 'Пожимание плечами', 'Аплодисменты', 'Супергерой'];
+  const AV = { style: 'studio', bg: 1, frame: 'portrait', angle: 15, skin: 1, hair: 0, top: 0, bottom: 0 };
+  try { Object.assign(AV, JSON.parse(localStorage.getItem('silhouette360.avatar') || '{}')); } catch (e) { /* defaults */ }
+  const saveAV = () => { try { localStorage.setItem('silhouette360.avatar', JSON.stringify(AV)); } catch (e) { /* private mode */ } };
+
+  // Offscreen renderer shared by every avatar export
+  let ar = null, envTex = null;
+  function avatarRenderer() {
+    if (ar) return ar;
+    ar = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    ar.outputEncoding = THREE.sRGBEncoding;
+    ar.toneMapping = THREE.ACESFilmicToneMapping; ar.toneMappingExposure = 1.05;
+    // a small studio for reflections: grey room with two softboxes
+    const pm = new THREE.PMREMGenerator(ar), s = new THREE.Scene();
+    s.add(new THREE.Mesh(new THREE.BoxGeometry(12, 12, 12), new THREE.MeshBasicMaterial({ color: 0x3a3d44, side: THREE.BackSide })));
+    [[4, 3, 3, 3, 2], [-4, 2, 2, 2, 3], [0, 5, -3, 4, 1]].forEach(([x, y, z, w, hh]) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+      m.material.color.setRGB(2.6, 2.6, 2.6); m.position.set(x, y, z); m.lookAt(0, 0, 0); s.add(m);
+    });
+    envTex = pm.fromScene(s, 0.04).texture; pm.dispose();
+    return ar;
+  }
+  const toonGrad = (() => { const d = new Uint8Array([70, 70, 70, 255, 160, 160, 160, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 3, 1, THREE.RGBAFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
+
+  function materialFor(part, style) {
+    const hex = part === 'eye' ? '#1b1a20' : part === 'shoes' ? '#3b2a20' : PALETTE[part] ? PALETTE[part][AV[part]] : '#ccc';
+    const col = new THREE.Color(hex).convertSRGBToLinear(); // palette hexes are sRGB
+    if (part === 'eye' && style !== 'marble' && style !== 'gold' && style !== 'clay') return new THREE.MeshStandardMaterial({ color: col, roughness: 0.15 });
+    switch (style) {
+      case 'toon': return new THREE.MeshToonMaterial({ color: col, gradientMap: toonGrad });
+      case 'marble': return new THREE.MeshPhysicalMaterial({ color: '#f1eee8', roughness: 0.32, clearcoat: 0.7, clearcoatRoughness: 0.2 });
+      case 'gold': return new THREE.MeshStandardMaterial({ color: '#e7b64c', metalness: 1, roughness: 0.26 });
+      case 'clay': return new THREE.MeshStandardMaterial({ color: '#d6c4b4', roughness: 0.9 });
+      case 'neon': return new THREE.MeshStandardMaterial({ color: '#1a1726', roughness: 0.35, metalness: 0.3 });
+      default: return new THREE.MeshStandardMaterial({ color: col, roughness: part === 'skin' ? 0.55 : 0.8 });
+    }
+  }
+
+  // Render the current body (or the photo scan) to a square canvas
+  function renderAvatar(size, o = {}) {
+    const style = o.style || AV.style, frame = o.frame || AV.frame;
+    const r = avatarRenderer();
+    r.setSize(size, size, false); r.setClearColor(0x000000, 0);
+    const sc = new THREE.Scene(); sc.environment = style === 'toon' ? null : envTex;
+    const mats = {};
+    let subject;
+    if (style === 'scan' && hullPts) {
+      subject = new THREE.Points(hullPts.geometry, new THREE.PointsMaterial({ size: hullPts.material.size * 1.25, vertexColors: true }));
+      mats.pts = subject.material;
+    } else {
+      subject = body.clone(true); subject.visible = true;
+      subject.traverse(m => {
+        if (m.isPoints) m.visible = false;
+        else if (m.isMesh) {
+          if (m.material === ringMat) { m.visible = false; return; }
+          const part = m.userData.part || 'top';
+          m.material = mats[part] || (mats[part] = materialFor(part, style));
+        }
+      });
+    }
+    sc.add(subject);
+    // lights: soft key, fill and a rim; neon gets coloured rims
+    const neon = style === 'neon';
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x444450, neon ? 0.12 : 0.3));
+    const L = (c, i, x, y, z) => { const l = new THREE.DirectionalLight(c, i); l.position.set(x, y, z); sc.add(l); return l; };
+    // key light follows the camera angle so the face stays lit
+    const a = AV.angle * Math.PI / 180 + (o.yaw || 0);
+    const rot = (x, z) => [x * Math.cos(a) + z * Math.sin(a), -x * Math.sin(a) + z * Math.cos(a)];
+    const [kx, kz] = rot(1.6, 2.4), [rx1, rz1] = rot(-2.5, -1.8), [rx2, rz2] = rot(2.5, -1.8);
+    L(0xffffff, neon ? 0.25 : 0.95, kx, 2.6, kz);
+    L(neon ? 0xff3ec8 : 0xffffff, neon ? 2.6 : 0.6, rx1, 1.8, rz1);
+    L(neon ? 0x2ee6ff : 0xffffff, neon ? 2.6 : 0.35, rx2, 1.6, rz2);
+
+    // framing from joint positions
+    subject.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(subject), H = P.height / 100;
+    const neckObj = style === 'scan' && hullPts ? null : subject.getObjectByName('neck');
+    const headW = new THREE.Vector3(0, (bb.max.y), 0);
+    if (neckObj) neckObj.localToWorld(headW.set(0, 0.095 * H, 0.01 * H));
+    else headW.set(0, bb.max.y - 0.09 * H, 0);
+    let cy, cx = headW.x, cz = headW.z, halfSpan;
+    if (frame === 'portrait') { cy = headW.y - 0.05 * H; halfSpan = 0.155 * H; }
+    else if (frame === 'bust') { cy = headW.y - 0.17 * H; halfSpan = 0.33 * H; }
+    else { const c = bb.getCenter(new THREE.Vector3()); cx = c.x; cz = c.z; cy = c.y; halfSpan = Math.max(bb.max.y - bb.min.y, bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.56; }
+    const fov = 26, dist = halfSpan / Math.tan(fov * Math.PI / 360);
+    const cam = new THREE.PerspectiveCamera(fov, 1, 0.05, 50);
+    cam.position.set(cx + Math.sin(a) * dist, cy + dist * 0.08, cz + Math.cos(a) * dist);
+    cam.lookAt(cx, cy, cz);
+    r.render(sc, cam);
+
+    // compose: background + render (+ outline for stickers)
+    const out = document.createElement('canvas'); out.width = out.height = size;
+    const ctx = out.getContext('2d');
+    if (!o.transparent) {
+      const [c1, c2] = BGS[AV.bg];
+      const g = ctx.createRadialGradient(size * 0.5, size * 0.38, size * 0.05, size * 0.5, size * 0.5, size * 0.75);
+      g.addColorStop(0, c1); g.addColorStop(1, c2);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+    }
+    if (o.outline) {
+      const sil = document.createElement('canvas'); sil.width = sil.height = size;
+      const sx = sil.getContext('2d'); sx.drawImage(r.domElement, 0, 0, size, size);
+      sx.globalCompositeOperation = 'source-in'; sx.fillStyle = '#ffffff'; sx.fillRect(0, 0, size, size);
+      const rad = size * 0.022;
+      for (let k = 0; k < 24; k++) { const t = k / 24 * Math.PI * 2; ctx.drawImage(sil, Math.cos(t) * rad, Math.sin(t) * rad); }
+    }
+    ctx.drawImage(r.domElement, 0, 0, size, size);
+    Object.values(mats).forEach(m => m.dispose());
+    return out;
+  }
+
+  // Render with a temporary pose, then restore the live one
+  function renderInPose(name, size, o) {
+    const entry = LIB.find(p => p.name === name);
+    const keep = clonePose(poseNow), keepProp = poseProp, keepT = targetY;
+    poseNow = clonePose(entry.pose); poseProp = entry.prop || null; applyPose(poseNow);
+    const c = renderAvatar(size, o);
+    poseNow = keep; poseProp = keepProp; applyPose(poseNow); targetY = keepT;
+    return c;
+  }
+  function stickerCanvas(i, size) {
+    const c = renderInPose(STICKER_POSES[i], size, { transparent: true, outline: true, frame: 'full' });
+    const cap = persona && persona.sticker_captions && persona.sticker_captions[i];
+    if (cap) {
+      const ctx = c.getContext('2d'), fs = Math.round(size * 0.085);
+      ctx.font = `700 ${fs}px Unbounded, "Arial Black", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.32; ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#16202b';
+      const text = String(cap).slice(0, 22);
+      ctx.strokeText(text, size / 2, size * 0.97, size * 0.92); ctx.fillText(text, size / 2, size * 0.97, size * 0.92);
+    }
+    return c;
+  }
+
+  /* Studio UI */
+  const av = $('#avPane');
+  function chipRow(id, items, key) {
+    $(id).innerHTML = items.map(([v, n]) => `<button data-v="${v}" class="${AV[key] === v ? 'on' : ''}"${v === 'scan' ? ' id="styleScan"' : ''}>${n}</button>`).join('');
+    $$(id + ' button').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.v === 'scan' && !hullPts) { avMsg('Сначала постройте 3D на вкладке «Фото → 3D».'); return; }
+      AV[key] = b.dataset.v; $$(id + ' button').forEach(x => x.classList.toggle('on', x === b)); refreshAvatar();
+    }));
+  }
+  function swatchRow(id, colors, key, isBg) {
+    $(id).innerHTML = colors.map((c, i) => `<button class="sw${AV[key] === i ? ' on' : ''}" data-i="${i}" aria-label="Вариант ${i + 1}" style="background:${isBg ? `radial-gradient(circle at 50% 38%, ${c[0]}, ${c[1]})` : c}"></button>`).join('');
+    $$(id + ' button').forEach(b => b.addEventListener('click', () => {
+      AV[key] = +b.dataset.i; $$(id + ' button').forEach(x => x.classList.toggle('on', x === b)); refreshAvatar();
+    }));
+  }
+  chipRow('#avStyle', STYLES, 'style');
+  chipRow('#avFrame', FRAMES, 'frame');
+  swatchRow('#avBg', BGS, 'bg', true);
+  swatchRow('#avSkin', PALETTE.skin, 'skin');
+  swatchRow('#avHair', PALETTE.hair, 'hair');
+  swatchRow('#avTop', PALETTE.top, 'top');
+  swatchRow('#avBottom', PALETTE.bottom, 'bottom');
+  $('#avAngle').value = AV.angle; $('#avAngleOut').textContent = AV.angle + '°';
+  $('#avAngle').addEventListener('input', e => { AV.angle = +e.target.value; $('#avAngleOut').textContent = AV.angle + '°'; refreshAvatar(); });
+  const avMsg = (t) => { $('#avMsg').textContent = t; };
+
+  let avTimer = null, avOpen = false, lastPreview = null;
+  function refreshAvatar() {
+    saveAV();
+    if (!avOpen) return;
+    clearTimeout(avTimer);
+    avTimer = setTimeout(() => {
+      if (AV.style === 'scan' && !hullPts) AV.style = 'studio';
+      lastPreview = renderAvatar(720);
+      const pv = $('#avPreview'), ctx = pv.getContext('2d');
+      ctx.clearRect(0, 0, pv.width, pv.height); ctx.drawImage(lastPreview, 0, 0, pv.width, pv.height);
+      $$('#avPlatforms canvas').forEach(c => { const x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height); x.drawImage(lastPreview, 0, 0, c.width, c.height); });
+    }, 120);
+  }
+  $('#avPlatforms').innerHTML = PLATFORMS.map(([n, s], i) => `<button class="plat" data-i="${i}" title="Сохранить для ${n}"><canvas width="96" height="96"></canvas><span>${n}</span><small>${s}×${s}</small></button>`).join('');
+  function renderStickers() {
+    $('#avStickers').innerHTML = '';
+    STICKER_POSES.forEach((n, i) => {
+      const c = stickerCanvas(i, 256); c.title = n; c.dataset.i = i;
+      const b = document.createElement('button'); b.className = 'stk'; b.setAttribute('aria-label', `Сохранить стикер «${n}»`); b.appendChild(c);
+      b.addEventListener('click', () => saveCanvas(stickerCanvas(i, 512), `sticker-${i + 1}.png`));
+      $('#avStickers').appendChild(b);
+    });
+  }
+  $('#avStickersBtn').addEventListener('click', renderStickers);
+
+  // Saving through the viewer (downloads capability), with a visible fallback
+  // inside a Claude viewer files go through the downloads capability; a standalone copy uses a plain link
+  let downloads = null;
+  const standalone = !window.claude;
+  if (!standalone && claude.use) claude.use('downloads').then(d => { downloads = d; });
+  const toBlob = (c) => new Promise(res => c.toBlob(res, 'image/png'));
+  async function saveFile(filename, data) {
+    if (standalone) {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(data); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      avMsg(`Сохранено: ${filename}`); return true;
+    }
+    if (!downloads) { avMsg('В этом просмотре сохранение файлов недоступно. Откройте прототип из репозитория или в приложении Claude.'); return false; }
+    try { await downloads.save({ filename, data }); avMsg(`Сохранено: ${filename}`); return true; }
+    catch (e) {
+      avMsg(e.code === 'declined' ? 'Сохранение отменено.' : e.code === 'rate_limited' ? 'Подождите пару секунд и попробуйте снова.' : 'Не удалось сохранить файл в этом просмотре.');
+      return false;
+    }
+  }
+  const saveCanvas = async (c, name) => saveFile(name, await toBlob(c));
+  $('#avPlatforms').addEventListener('click', e => {
+    const b = e.target.closest('.plat'); if (!b) return;
+    const [n, s] = PLATFORMS[+b.dataset.i];
+    saveCanvas(renderAvatar(s), `avatar-${translit(n)}-${s}.png`);
+  });
+  const translit = (s) => s.toLowerCase().replace(/[а-яё]/g, ch => ({ а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ы: 'y', э: 'e', ю: 'yu', я: 'ya' }[ch] || '')).replace(/[^a-z0-9]+/g, '-');
+
+  $('#avZip').addEventListener('click', async () => {
+    if (typeof JSZip === 'undefined') { avMsg('Архиватор не загрузился. Сохраняйте картинки по одной.'); return; }
+    const btn = $('#avZip'); btn.disabled = true; avMsg('Собираю пакет: 12 аватарок и 6 стикеров…');
+    await tick();
+    const zip = new JSZip();
+    for (const [n, s] of PLATFORMS) { zip.file(`avatars/${translit(n)}-${s}.png`, await toBlob(renderAvatar(s))); await tick(); }
+    for (let i = 0; i < STICKER_POSES.length; i++) { zip.file(`stickers/${i + 1}-${translit(STICKER_POSES[i])}.png`, await toBlob(stickerCanvas(i, 512))); await tick(); }
+    if (persona) zip.file('persona.json', JSON.stringify(persona, null, 2));
+    zip.file('README.txt', [
+      'Пакет аватара «Силуэт 360»', '',
+      'avatars/ — квадратные PNG под каждую сеть, сеть сама обрежет их в круг.',
+      'stickers/ — 512×512 PNG с прозрачным фоном и белой обводкой.',
+      '  Telegram: отправьте их боту @Stickers. WhatsApp: нужен WebP — сконвертируйте в любом приложении для стикеров.',
+      persona ? 'persona.json — описание искусственной личности: био для сетей, тон, приветствие.' : '',
+    ].join('\n'));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    await saveFile('avatar-pack.zip', blob);
+    btn.disabled = false;
+  });
+
+  /* ---------- Artificial personality (ИЛ) ---------- */
+  const TRAITS = ['Дружелюбная', 'Ироничная', 'Деловая', 'Творческая', 'Спортивная', 'Загадочная', 'Заботливая', 'Дерзкая'];
+  let persona = null, traits = new Set(['Дружелюбная', 'Творческая']);
+  try { persona = JSON.parse(localStorage.getItem('silhouette360.persona') || 'null'); } catch (e) { persona = null; }
+  $('#ilTraits').innerHTML = TRAITS.map(t => `<button data-t="${t}" class="${traits.has(t) ? 'on' : ''}">${t}</button>`).join('');
+  $$('#ilTraits button').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.t;
+    if (traits.has(t)) traits.delete(t); else if (traits.size < 3) traits.add(t); else { ilMsg('Можно выбрать до трёх черт.'); return; }
+    b.classList.toggle('on', traits.has(t));
+  }));
+  const ilMsg = (t) => { $('#ilMsg').textContent = t; };
+
+  let sample = null;
+  if (window.claude && claude.use) claude.use('sample').then(s => { sample = s; });
+
+  function personaPrompt() {
+    return `Создай «искусственную личность» (ИЛ) — цифровой образ человека для аватарки во всех соцсетях и мессенджерах.
+Данные от человека:
+- Имя или ник: ${$('#ilName').value.trim() || 'не указано'}
+- Черты характера: ${[...traits].join(', ') || 'не указаны'}
+- О себе и интересы: ${$('#ilAbout').value.trim() || 'не указано'}
+- Обращение к собеседнику: ${$('#ilTone').value}
+- Язык текстов: ${$('#ilLang').value}
+Пиши живо, без канцелярита и без эмодзи-спама (максимум одно эмодзи на текст). Соблюдай лимиты символов строго.
+Верни только JSON такого вида:
+{"name":"имя ИЛ","tagline":"слоган до 40 символов",
+"bios":{"Telegram":"до 70 символов","Instagram":"до 150","ВКонтакте":"до 140","TikTok":"до 80","X":"до 160","LinkedIn":"заголовок до 220","YouTube":"до 200"},
+"greeting":"первое сообщение ИЛ новому собеседнику, до 200 символов",
+"voice":["3 коротких правила стиля речи"],
+"hashtags":["5 хэштегов без пробелов"],
+"sticker_captions":["6 подписей до 16 символов к стикерам: привет, победа, задумчивость, пожимание плечами, аплодисменты, супергерой"]}`;
+  }
+  function templatePersona() {
+    const name = $('#ilName').value.trim() || 'Силуэт';
+    const tr = [...traits].map(t => t.toLowerCase());
+    const about = $('#ilAbout').value.trim();
+    const line = `${name}: ${tr.join(', ') || 'просто я'}${about ? ' · ' + about : ''}`;
+    return {
+      name, tagline: `${name} — ${tr[0] || 'цифровая'} версия`.slice(0, 40),
+      bios: Object.fromEntries([['Telegram', 70], ['Instagram', 150], ['ВКонтакте', 140], ['TikTok', 80], ['X', 160], ['LinkedIn', 220], ['YouTube', 200]].map(([k, n]) => [k, line.slice(0, n)])),
+      greeting: `Привет! Я ${name}, цифровая личность. ${about ? 'Люблю ' + about.toLowerCase() + '. ' : ''}О чём поговорим?`.slice(0, 200),
+      voice: ['Коротко и по делу', 'Тепло, без официоза', 'Один вопрос в конце'],
+      hashtags: ['#ИЛ', '#аватар', '#3d', '#силуэт360', '#digitalme'],
+      sticker_captions: ['Привет!', 'Есть!', 'Хмм…', 'Ну такое', 'Браво!', 'Я справлюсь'],
+      offline: true,
+    };
+  }
+  $('#ilGen').addEventListener('click', async () => {
+    const btn = $('#ilGen'); btn.disabled = true;
+    if (!sample) {
+      persona = templatePersona();
+      ilMsg('Claude недоступен в этом просмотре — собрал личность по шаблону.');
+    } else {
+      ilMsg('Claude придумывает личность…');
+      try {
+        const p = await sample.json(personaPrompt());
+        if (!p || typeof p !== 'object' || !p.bios) throw { code: 'bad_shape' };
+        persona = p; ilMsg('Готово. Тексты можно скопировать, подписи уже на стикерах.');
+      } catch (e) {
+        persona = templatePersona();
+        ilMsg(e.code === 'not_granted' ? 'Доступ к Claude не разрешён — собрал личность по шаблону.' : e.code === 'rate_limited' ? 'Слишком много запросов. Пока собрал по шаблону, попробуйте позже.' : 'Claude не ответил как нужно — собрал личность по шаблону.');
+      }
+    }
+    try { localStorage.setItem('silhouette360.persona', JSON.stringify(persona)); } catch (e) { /* ignore */ }
+    chat = [];
+    renderPersona(); btn.disabled = false;
+    if ($('#avStickers').children.length) renderStickers();
+  });
+  function renderPersona() {
+    const box = $('#ilOut');
+    if (!persona) { box.hidden = true; return; }
+    box.hidden = false;
+    const bios = persona.bios || {};
+    box.innerHTML = `<div class="il-card"><b>${esc(persona.name || '')}</b><span>${esc(persona.tagline || '')}</span></div>
+      ${Object.entries(bios).map(([k, v]) => `<div class="bio"><div class="row"><span class="label">${esc(k)}</span><small>${String(v).length} симв.</small></div><p>${esc(v)}</p><button class="copy" data-copy="${esc(v)}">Копировать</button></div>`).join('')}
+      <div class="bio"><span class="label">Приветствие</span><p>${esc(persona.greeting || '')}</p></div>
+      <div class="bio"><span class="label">Стиль речи</span><p>${(persona.voice || []).map(esc).join(' · ')}</p></div>
+      <div class="bio"><span class="label">Хэштеги</span><p>${(persona.hashtags || []).map(esc).join(' ')}</p><button class="copy" data-copy="${esc((persona.hashtags || []).join(' '))}">Копировать</button></div>`;
+    $$('.copy', box).forEach(b => b.addEventListener('click', () => {
+      const t = b.dataset.copy;
+      try { navigator.clipboard.writeText(t).then(() => ilMsg('Скопировано.'), () => selectText(b.previousElementSibling)); } catch (e) { selectText(b.previousElementSibling); }
+    }));
+    $('#ilChat').hidden = false;
+    $('#chatLog').innerHTML = `<div class="msg ai">${esc(persona.greeting || 'Привет!')}</div>`;
+  }
+  function selectText(el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); ilMsg('Выделил текст — скопируйте вручную.'); }
+
+  // Talk to the persona
+  let chat = [];
+  $('#chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const inp = $('#chatInput'), text = inp.value.trim();
+    if (!text || !persona) return;
+    inp.value = '';
+    const log = $('#chatLog');
+    log.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(text)}</div>`);
+    const bubble = document.createElement('div'); bubble.className = 'msg ai'; bubble.textContent = '…'; log.appendChild(bubble);
+    log.scrollTop = log.scrollHeight;
+    if (!sample) { bubble.textContent = 'Чат с ИЛ работает, когда прототип открыт в Claude и доступ к Claude разрешён.'; return; }
+    chat.push({ role: 'user', content: text });
+    const rules = `Ты — искусственная личность (ИЛ) по имени ${persona.name}. Слоган: ${persona.tagline}. Правила речи: ${(persona.voice || []).join('; ')}. ` +
+      `Ты цифровой аватар человека, говоришь от своего лица как ИЛ и не выдаёшь себя за живого человека, если спросят прямо. Отвечай коротко, 1–3 предложения, на языке собеседника.`;
+    try {
+      const { text: ans } = await sample([{ role: 'user', content: rules }, { role: 'assistant', content: persona.greeting || 'Привет!' }, ...chat.slice(-10)], {
+        cache: false, modelTier: 'quick', onText: ({ text: t }) => { bubble.textContent = t; log.scrollTop = log.scrollHeight; },
+      });
+      chat.push({ role: 'assistant', content: ans });
+    } catch (err) {
+      chat.pop();
+      bubble.textContent = err.code === 'not_granted' ? 'Доступ к Claude не разрешён.' : err.code === 'rate_limited' ? 'Слишком часто — подождите немного.' : 'Не получилось ответить, попробуйте ещё раз.';
+    }
+  });
+  if (persona) renderPersona();
 
   /* ---------- Measurements ---------- */
   function renderMeasures() {
