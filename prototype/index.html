@@ -321,6 +321,11 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
           <input type="number" id="photoH" min="120" max="220" value="178" inputmode="numeric">
         </div>
         <div class="field">
+          <div class="row"><label for="photoF">Фокусное расстояние камеры, мм (экв. 35 мм)</label></div>
+          <input type="number" id="photoF" min="0" max="120" value="26" inputmode="numeric">
+          <p class="note">Основная камера телефона — 24–26 мм, без зума. 0 — снимки без перспективы.</p>
+        </div>
+        <div class="field">
           <span class="label">Направление обхода (вид сверху)</span>
           <div class="seg">
             <input type="radio" name="dir" id="dir-cw" value="cw" checked><label for="dir-cw">По часовой</label>
@@ -1010,20 +1015,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const photoMsg = (t) => { $('#photoMsg').textContent = t; };
 
   /* Background removal: background = linear blend of the row's left and right edges (handles wall + floor and side light) */
-  function segment(p, thr) {
-    const { w, h, data } = p, m = Math.max(3, Math.round(w * 0.05));
-    const mask = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) {
-      const L = [0, 0, 0], R = [0, 0, 0];
-      for (let x = 0; x < m; x++) for (let c = 0; c < 3; c++) { L[c] += data[(y * w + x) * 4 + c]; R[c] += data[(y * w + w - 1 - x) * 4 + c]; }
-      for (let c = 0; c < 3; c++) { L[c] /= m; R[c] /= m; }
-      for (let x = 0; x < w; x++) {
-        const t = x / (w - 1), i = (y * w + x) * 4;
-        const dr = data[i] - (L[0] + (R[0] - L[0]) * t), dg = data[i + 1] - (L[1] + (R[1] - L[1]) * t), db = data[i + 2] - (L[2] + (R[2] - L[2]) * t);
-        mask[y * w + x] = dr * dr + dg * dg + db * db > thr * thr ? 1 : 0;
-      }
-    }
-    // keep the largest connected blob
+  // label 4-connected blobs of a mask, return the largest one's label array, id and size
+  function largestBlob(mask, w, h) {
     const lab = new Int32Array(w * h), q = new Int32Array(w * h);
     let best = 0, bestSize = 0, id = 0;
     for (let s = 0; s < w * h; s++) {
@@ -1038,6 +1031,26 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
       }
       if (qt > bestSize) { bestSize = qt; best = id; }
     }
+    return { lab, best, bestSize, q };
+  }
+  function segment(p, thr) {
+    const { w, h, data } = p, m = Math.max(3, Math.round(w * 0.05));
+    const mask = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const L = [0, 0, 0], R = [0, 0, 0];
+      for (let x = 0; x < m; x++) for (let c = 0; c < 3; c++) { L[c] += data[(y * w + x) * 4 + c]; R[c] += data[(y * w + w - 1 - x) * 4 + c]; }
+      for (let c = 0; c < 3; c++) { L[c] /= m; R[c] /= m; }
+      for (let x = 0; x < w; x++) {
+        const t = x / (w - 1), i = (y * w + x) * 4;
+        const br = L[0] + (R[0] - L[0]) * t, bgc = L[1] + (R[1] - L[1]) * t, bb = L[2] + (R[2] - L[2]) * t;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const dr = r - br, dg = g - bgc, db = b - bb;
+        if (dr * dr + dg * dg + db * db <= thr * thr) continue;
+        mask[y * w + x] = 1;
+      }
+    }
+    // keep the largest connected blob
+    const { lab, best, bestSize, q } = largestBlob(mask, w, h);
     for (let s = 0; s < w * h; s++) mask[s] = lab[s] === best ? 1 : 0;
     // fill holes: everything empty that the border cannot reach is inside the body
     const out = new Uint8Array(w * h); let qh = 0, qt = 0;
@@ -1056,9 +1069,14 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     p.mask = mask;
     p.ok = bestSize > w * h * 0.02 && y1 - y0 > h * 0.3;
     if (!p.ok) return;
-    let sx = 0, n = 0;
-    for (let y = Math.round(y0 + (y1 - y0) * 0.25); y < y0 + (y1 - y0) * 0.55; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) { sx += x; n++; }
-    Object.assign(p, { y0, y1, cx: n ? sx / n : w / 2 });
+    // body axis: median over torso rows of each row's middle pixel (robust to stray blobs at the side)
+    const mids = [];
+    for (let y = Math.round(y0 + (y1 - y0) * 0.25); y < y0 + (y1 - y0) * 0.55; y++) {
+      const xsRow = []; for (let x = 0; x < w; x++) if (mask[y * w + x]) xsRow.push(x);
+      if (xsRow.length) mids.push(xsRow[xsRow.length >> 1]);
+    }
+    mids.sort((a, b) => a - b);
+    Object.assign(p, { y0, y1, cx: mids.length ? mids[mids.length >> 1] : w / 2 });
   }
 
   function drawThumb(p, i) {
@@ -1085,8 +1103,14 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     stage_(1, 'run');
     const thr = +$('#bgThr').value;
     for (let i = 0; i < photos.length; i++) { segment(photos[i], thr); if (i % 6 === 5) { stage_(1, 'run', `${i + 1}/${photos.length}`); await tick(); } }
-    const ok = photos.filter(p => p.ok).length;
-    stage_(1, ok ? 'done' : '', `${ok}/${photos.length}`);
+    // Feet line: a floor shadow can stretch a silhouette downwards. The head top is reliable and, walking a circle
+    // at one distance, the person's height in pixels is nearly the same in every shot, so outliers get the median.
+    const good = photos.filter(p => p.ok);
+    const hs = good.map(p => p.y1 - p.y0).sort((a, b) => a - b), med = hs[hs.length >> 1];
+    let fixedFeet = 0;
+    good.forEach(p => { if (Math.abs(p.y1 - p.y0 - med) > med * 0.04) { p.y1 = p.y0 + med; fixedFeet++; } });
+    const ok = good.length;
+    stage_(1, ok ? 'done' : '', `${ok}/${photos.length}${fixedFeet ? `, тени: ${fixedFeet}` : ''}`);
     renderThumbs(); drawCoverage();
     $('#buildBtn').disabled = ok < 4;
   }
@@ -1098,32 +1122,69 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   async function carve(H) {
     stage_(2, 'run');
     const views = photos.map((p, i) => ({ p, th: angleOf(i) })).filter(v => v.p.ok);
-    views.forEach(v => { v.sc = H / (v.p.y1 - v.p.y0); v.c = Math.cos(v.th); v.s = Math.sin(v.th); });
+    // pinhole camera per photo: focal length from the 35 mm equivalent, distance and camera height from the silhouette
+    const feq = +$('#photoF').value || 0;
+    views.forEach(v => {
+      const p = v.p, ph = p.y1 - p.y0;
+      v.c = Math.cos(v.th); v.s = Math.sin(v.th); v.dx = 0; v.dy = 0;
+      if (feq > 0) {
+        v.f = feq / 43.27 * Math.hypot(p.w, p.h);
+        v.D = v.f * H / ph;
+        v.hc = (p.y1 - p.h / 2) * v.D / v.f;
+      } else { v.f = ph / H; v.D = 1e6; v.hc = 0; v.ortho = true; }
+      // project world point → pixel
+      v.proj = (x, y, z) => {
+        const xr = x * v.c - z * v.s, dz = x * v.s + z * v.c, k = v.ortho ? v.f : v.f / (v.D - dz);
+        return [p.cx + v.dx + xr * k, (v.ortho ? p.y1 - y * k : p.h / 2 + (v.hc - y) * k) + v.dy];
+      };
+    });
     stage_(2, 'done', `${views.length} силуэтов`);
 
     stage_(3, 'run');
     const NY = 176, vox = H * 1.03 / NY, half = 0.42 * H, NX = Math.ceil(2 * half / vox), NZ = NX;
-    const miss = new Uint8Array(NX * NY * NZ);
     const xs = Float32Array.from({ length: NX }, (_, i) => -half + (i + 0.5) * vox);
-    for (let vi = 0; vi < views.length; vi++) {
-      const { p, sc, c, s } = views[vi], { w, h, mask, cx, y1 } = p;
-      for (let iy = 0; iy < NY; iy++) {
-        const py = Math.round(y1 - ((iy + 0.5) * vox) / sc), rowOk = py >= 0 && py < h, row = py * w;
-        for (let iz = 0; iz < NZ; iz++) {
-          const zs = xs[iz] * s, base = (iy * NZ + iz) * NX;
-          for (let ix = 0; ix < NX; ix++) {
-            let inside = false;
-            if (rowOk) { const px = Math.round(cx + (xs[ix] * c - zs) / sc); inside = px >= 0 && px < w && mask[row + px] === 1; }
-            if (!inside && miss[base + ix] < 255) miss[base + ix]++;
+    const tol = Math.max(1, Math.round(views.length * 0.08));
+    const pass = async (label) => {
+      const miss = new Uint8Array(NX * NY * NZ);
+      for (let vi = 0; vi < views.length; vi++) {
+        const v = views[vi], { w, h, mask, cx, y1 } = v.p, { c, s, f, D, hc } = v;
+        for (let iz = 0; iz < NZ; iz++) for (let ix = 0; ix < NX; ix++) {
+          const xr = xs[ix] * c - xs[iz] * s, dz = xs[ix] * s + xs[iz] * c;
+          const k = v.ortho ? f : f / (D - dz), px = Math.round(cx + v.dx + xr * k), colOk = px >= 0 && px < w;
+          const y0px = (v.ortho ? y1 : h / 2 + hc * k) + v.dy;
+          for (let iy = 0; iy < NY; iy++) {
+            const idx = (iy * NZ + iz) * NX + ix;
+            const py = Math.round(y0px - (iy + 0.5) * vox * k);
+            if (!(colOk && py >= 0 && py < h && mask[py * w + px] === 1) && miss[idx] < 255) miss[idx]++;
           }
         }
+        if (vi % 3 === 2) { stage_(3, 'run', `${label} ${vi + 1}/${views.length}`); await tick(); }
       }
-      if (vi % 3 === 2) { stage_(3, 'run', `${vi + 1}/${views.length}`); await tick(); }
+      const occ = new Uint8Array(NX * NY * NZ);
+      for (let i = 0; i < occ.length; i++) if (miss[i] <= tol) occ[i] = 1;
+      return occ;
+    };
+    let occ = await pass('проход 1:');
+    // align every photo to the first hull: try small pixel shifts, keep the one that puts most hull points inside its silhouette
+    const pts = [];
+    for (let iy = 0; iy < NY; iy += 2) for (let iz = 0; iz < NZ; iz += 2) for (let ix = 0; ix < NX; ix += 2) if (occ[(iy * NZ + iz) * NX + ix]) pts.push(xs[ix], (iy + 0.5) * vox, xs[iz]);
+    if (pts.length > 300) {
+      for (const v of views) {
+        const { w, h, mask } = v.p, uv = new Float32Array(pts.length / 3 * 2);
+        for (let i = 0, j = 0; i < pts.length; i += 3, j += 2) { const q = v.proj(pts[i], pts[i + 1], pts[i + 2]); uv[j] = q[0]; uv[j + 1] = q[1]; }
+        const score = (dx, dy) => { let n = 0; for (let j = 0; j < uv.length; j += 2) { const px = Math.round(uv[j] + dx), py = Math.round(uv[j + 1] + dy); if (px >= 0 && py >= 0 && px < w && py < h && mask[py * w + px]) n++; } return n; };
+        let bx = 0, by = 0, bs = score(0, 0);
+        for (let dx = -8; dx <= 8; dx++) { const sc = score(dx, 0); if (sc > bs) { bs = sc; bx = dx; } }
+        for (let dy = -5; dy <= 5; dy++) { const sc = score(bx, dy); if (sc > bs) { bs = sc; by = dy; } }
+        v.dx += bx; v.dy += by;
+      }
+      await tick();
+      occ = await pass('проход 2:');
     }
-    const tol = Math.max(1, Math.round(views.length * 0.06));
-    const occ = new Uint8Array(NX * NY * NZ);
-    let count = 0;
-    for (let i = 0; i < occ.length; i++) if (miss[i] <= tol) { occ[i] = 1; count++; }
+    // a floor shadow is seen from many sides and survives carving as a flat sheet: clear the floor layer away from the feet
+    const r2max = (0.16 * H) ** 2;
+    for (let iy = 0; (iy + 0.5) * vox < 0.035 * H; iy++) for (let iz = 0; iz < NZ; iz++) for (let ix = 0; ix < NX; ix++) if (xs[ix] ** 2 + xs[iz] ** 2 > r2max) occ[(iy * NZ + iz) * NX + ix] = 0;
+    let count = 0; for (let i = 0; i < occ.length; i++) count += occ[i];
     stage_(3, 'done', `${(count / 1000).toFixed(0)} тыс. вокселей`);
     return { occ, NX, NY, NZ, vox, half, xs, views };
   }
@@ -1144,7 +1205,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         if (!nx && !nz) { nx = x; nz = z; }
         let best = null, bd = -2;
         for (const v of views) { const d = v.s * nx + v.c * nz; if (d > bd) { bd = d; best = v; } }
-        const p = best.p, px = Math.round(p.cx + (x * best.c - z * best.s) / best.sc), py = Math.round(p.y1 - y / best.sc);
+        const p = best.p, uv = best.proj(x, y, z), px = Math.round(uv[0]), py = Math.round(uv[1]);
         const k = (Math.min(p.h - 1, Math.max(0, py)) * p.w + Math.min(p.w - 1, Math.max(0, px))) * 4;
         tmpC.setRGB(p.data[k] / 255, p.data[k + 1] / 255, p.data[k + 2] / 255).convertSRGBToLinear();
         pos.push(x, y, z); col.push(tmpC.r, tmpC.g, tmpC.b);
@@ -1258,7 +1319,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     const r2 = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     r2.setSize(W, Hpx, false); r2.outputEncoding = THREE.sRGBEncoding;
     const sc = new THREE.Scene(); sc.background = new THREE.Color('#b4bfc8');
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshLambertMaterial({ color: '#a89f92' }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(200, 64), new THREE.MeshLambertMaterial({ color: '#a89f92' }));
     floor.rotation.x = -Math.PI / 2; sc.add(floor);
     sc.add(new THREE.HemisphereLight(0xffffff, 0x777777, 0.7));
     const flash = new THREE.DirectionalLight(0xffffff, 0.65); sc.add(flash, flash.target);
@@ -1267,11 +1328,14 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     const clone = body.clone(true); clone.visible = true;
     clone.traverse(o => { if (o.isPoints) o.visible = false; else if (o.isMesh) { if (o.material === ringMat) o.visible = false; else o.material = mats[o.userData.part] || mats.top; } });
     sc.add(clone);
-    const half = 1.06, cam = new THREE.OrthographicCamera(-half * W / Hpx, half * W / Hpx, half, -half, 0.1, 30);
+    // phone main camera: 26 mm equivalent, held at waist height 2.6 m away
+    const vfov = 2 * Math.atan((Hpx / 2) / (26 / 43.27 * Math.hypot(W, Hpx))) * 180 / Math.PI;
+    const cam = new THREE.PerspectiveCamera(vfov, W / Hpx, 0.1, 30);
+    $('#photoF').value = 26;
     photos = [];
     for (let i = 0; i < N; i++) {
       const th = i * Math.PI * 2 / N;
-      cam.position.set(Math.sin(th) * 6, H * 0.5 + 0.35, Math.cos(th) * 6); cam.lookAt(0, H * 0.5, 0);
+      cam.position.set(Math.sin(th) * 2.6, 1.0, Math.cos(th) * 2.6); cam.lookAt(0, 0.92, 0);
       flash.position.copy(cam.position).add(new THREE.Vector3(0.8, 1.5, 0)); flash.target.position.set(0, H * 0.5, 0);
       r2.render(sc, cam);
       photos.push(toCanvas(r2.domElement, W, Hpx));
