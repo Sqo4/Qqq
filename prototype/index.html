@@ -99,6 +99,19 @@ td small { color: var(--muted); font-family: var(--f-body); }
 .stages li.done::before { border-color: var(--ok); background: var(--ok); }
 .stages li span { margin-left: auto; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
 @keyframes pulse { to { opacity: .35; } }
+.rowc { display: flex; gap: 6px; }
+.rowc input { flex: 1; min-width: 0; }
+input[type=search], input[type=text], textarea { font: 400 13px/1.3 var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+textarea { font-family: var(--f-mono); font-size: 11.5px; width: 100%; box-sizing: border-box; resize: vertical; }
+input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.posegrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; height: min(300px, 45vh); align-content: start; overflow-y: auto; padding-right: 2px; }
+.pose-item { position: relative; }
+.pose-btn { width: 100%; text-align: left; display: grid; gap: 3px; padding: 8px 10px; line-height: 1.2; }
+.pose-btn small { color: var(--muted); font-weight: 400; font-size: 10.5px; }
+.pose-item.on .pose-btn { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pose-del { position: absolute; top: 3px; right: 3px; padding: 2px 7px; border: 0; background: transparent; color: var(--muted); font-size: 15px; }
+.chips button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.divider { height: 1px; background: var(--line); }
 .ringwrap { display: flex; gap: 14px; align-items: center; }
 .ringwrap svg { width: 96px; height: 96px; flex: none; }
 .ringwrap .big { font-family: var(--f-display); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
@@ -117,7 +130,7 @@ td small { color: var(--muted); font-family: var(--f-body); }
 <div class="app">
   <header>
     <h1>Силуэт <span>360</span></h1>
-    <div class="sub">Прототип: параметрическая модель тела, обзор 360°, мерки и симуляция скана</div>
+    <div class="sub">Прототип: параметрическая модель тела, обзор 360°, позы, мерки и симуляция скана</div>
   </header>
 
   <div class="main">
@@ -143,6 +156,7 @@ td small { color: var(--muted); font-family: var(--f-body); }
     <div class="panel">
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-tab="body">Тело</button>
+        <button role="tab" aria-selected="false" data-tab="pose">Позы</button>
         <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
         <button role="tab" aria-selected="false" data-tab="scan">Скан 360</button>
       </div>
@@ -168,6 +182,34 @@ td small { color: var(--muted); font-family: var(--f-body); }
         <div class="seg">
           <input type="checkbox" id="ringsChk" checked><label for="ringsChk">Показывать обхваты</label>
         </div>
+      </div>
+
+      <div class="pane" data-pane="pose" hidden>
+        <div class="field">
+          <label class="label" for="poseSearch">Библиотека поз <span id="poseCount"></span></label>
+          <div class="rowc"><input type="search" id="poseSearch" placeholder="Поиск: йога, бег, сидя…"><button id="showBtn">Слайд-шоу</button></div>
+        </div>
+        <div class="chips" id="poseCats"></div>
+        <div class="posegrid" id="poseGrid"></div>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="label">Своя поза</span>
+          <p class="note">Нажмите на часть тела на модели или выберите сустав. Подсвеченный сегмент двигается ползунками.</p>
+        </div>
+        <div class="chips" id="jointChips"></div>
+        <div id="jointSliders" class="sliders"></div>
+        <div class="seg"><input type="checkbox" id="mirrorChk"><label for="mirrorChk">Зеркально для обеих сторон</label></div>
+        <div class="field">
+          <label class="label" for="poseName">Название</label>
+          <div class="rowc"><input type="text" id="poseName" placeholder="Моя поза" maxlength="40"><button class="primary" id="savePose">Сохранить</button></div>
+        </div>
+        <div class="chips">
+          <button id="resetPose">Сбросить</button><button id="copyPose">Копировать JSON</button><button id="importPose">Вставить JSON</button>
+        </div>
+        <textarea id="poseJson" rows="4" hidden aria-label="JSON позы"></textarea>
+        <button id="applyJson" hidden>Применить JSON</button>
+        <p class="note" id="poseMsg" aria-live="polite"></p>
+        <p class="note">Свои позы хранятся в этом браузере.</p>
       </div>
 
       <div class="pane" data-pane="meas" hidden>
@@ -233,12 +275,13 @@ td small { color: var(--muted); font-family: var(--f-body); }
   }
   $$('input[name=preset]').forEach(r => r.addEventListener('change', () => { Object.assign(P, PRESETS[r.value]); syncUI(); rebuild(); }));
   $$('input[name=mode]').forEach(r => r.addEventListener('change', () => { mode = r.value; applyMode(); }));
-  $('#ringsChk').addEventListener('change', e => { showRings = e.target.checked; rings.visible = showRings; });
+  $('#ringsChk').addEventListener('change', e => { showRings = e.target.checked; ringMeshes.forEach(m => m.visible = showRings); });
 
   /* ---------- Tabs ---------- */
   $$('.tabs button').forEach(b => b.addEventListener('click', () => {
     $$('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
     $$('.pane[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+    poseTabOpen = b.dataset.tab === 'pose'; applyMode();
   }));
 
   /* ---------- Three.js scene ---------- */
@@ -259,6 +302,9 @@ td small { color: var(--muted); font-family: var(--f-body); }
   const hiddenMat = new THREE.MeshBasicMaterial({ visible: false });
   const ptsMat = new THREE.PointsMaterial({ size: 0.007, sizeAttenuation: true, transparent: true, opacity: 1 });
   const ringMat = new THREE.MeshBasicMaterial();
+  const selMat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0, side: THREE.DoubleSide, emissiveIntensity: 0.35 });
+  const selWireMat = new THREE.MeshBasicMaterial({ wireframe: true });
+  let targetY = 0.9;
 
   // Turntable with degree scale
   const ttCanvas = document.createElement('canvas'); ttCanvas.width = ttCanvas.height = 1024;
@@ -286,13 +332,14 @@ td small { color: var(--muted); font-family: var(--f-body); }
     ttTex.needsUpdate = true;
   }
 
-  /* ---------- Procedural body ---------- */
+  /* ---------- Procedural body on a joint hierarchy ---------- */
   const SX = 1.15, SZ = 0.8; // torso cross-section is an ellipse, roughly same circumference as a circle of radius r
   const rOf = (cm) => cm / 100 / (2 * Math.PI);
   const V2 = THREE.Vector2;
-  let body = new THREE.Group(), rings = new THREE.Group();
-  scene.add(body, rings);
-  const meshes = [];
+  const body = new THREE.Group(); scene.add(body);
+  const meshes = [], ringMeshes = [];
+  const J = {}; // joint groups by key
+  let curJ = 'root', pelvisY = 0.88;
 
   function smoothLathe(pts, seg = 48, samples = 64) {
     return new THREE.LatheGeometry(new THREE.SplineCurve(pts).getPoints(samples), seg);
@@ -310,6 +357,7 @@ td small { color: var(--muted); font-family: var(--f-body); }
   function add(parent, geo, x = 0, y = 0, z = 0) {
     const m = new THREE.Mesh(geo, clayMat);
     m.position.set(x, y, z);
+    m.userData.joint = curJ;
     const p = new THREE.Points(geo, ptsMat); p.visible = false; m.add(p);
     parent.add(m); meshes.push(m);
     return m;
@@ -318,48 +366,75 @@ td small { color: var(--muted); font-family: var(--f-body); }
     const m = add(parent, new THREE.SphereGeometry(1, 40, 28), x, y, z);
     m.scale.set(rx, ry, rz); return m;
   }
+  function joint(key, parent, x, y, z) {
+    const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); J[key] = g; return g;
+  }
+  function girthRing(parent, name, cm, r, yAbs, yParent) {
+    const pts = [];
+    for (let i = 0; i < 96; i++) {
+      const a = i / 96 * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * r * SX * 1.035, yAbs - yParent, Math.sin(a) * r * SZ * 1.035));
+    }
+    const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 120, 0.0038, 6, true), ringMat);
+    m.userData = { label: `${name} ${cm} см`, y: yAbs - yParent, r: r * SX * 1.05 };
+    m.visible = showRings;
+    parent.add(m); ringMeshes.push(m);
+  }
 
   function rebuild() {
-    // dispose old
     meshes.forEach(m => m.geometry.dispose()); meshes.length = 0;
-    scene.remove(body); body = new THREE.Group(); scene.add(body);
-    rings.children.forEach(r => r.geometry.dispose()); rings.clear();
+    ringMeshes.forEach(m => m.geometry.dispose()); ringMeshes.length = 0;
+    body.clear();
 
     const h = P.height / 100;
     const cr = rOf(P.chest), wr = rOf(P.waist), hr = rOf(P.hips);
     const sw = P.shoulders / 100;
     const k = Math.sqrt(P.chest / 98);
     const nr = 0.058 * k;
+    const yP = 0.5 * h, yS = 0.61 * h, yN = 0.845 * h, ySh = 0.808 * h, yH = 0.48 * h;
+    pelvisY = yP;
+    const prof = (arr, y0) => arr.map(([r, y]) => new V2(r, y * h - y0));
 
-    // Torso (lathe profile r,y from crotch to neck base)
-    const tp = [
+    // Pelvis (root): lower torso + waist filler
+    curJ = 'root';
+    const root = joint('root', body, 0, yP, 0);
+    const lower = add(root, smoothLathe(prof([
       [0.0001, 0.452], [hr * 0.62, 0.458], [hr * 0.93, 0.478], [hr, 0.50], [(hr + wr) / 2 * 1.02, 0.555],
-      [wr, 0.61], [(wr + cr) / 2, 0.665], [cr, 0.72], [cr * 0.97, 0.77], [cr * 0.84, 0.805],
-      [cr * 0.55, 0.832], [nr * 1.15, 0.845], [0.0001, 0.852],
-    ].map(([r, y]) => new V2(r, y * h));
-    const torso = add(body, smoothLathe(tp, 64, 96));
-    torso.scale.set(SX, 1, SZ);
+      [wr, 0.61], [wr * 0.95, 0.63], [0.0001, 0.645]], yP), 64, 80));
+    lower.scale.set(SX, 1, SZ);
+    ellipsoid(root, wr * SX * 0.98, wr * 0.75, wr * SZ * 0.98, 0, yS - yP, 0);
+    girthRing(root, 'Талия', P.waist, wr, yS, yP);
+    girthRing(root, 'Бёдра', P.hips, hr, 0.50 * h, yP);
 
-    // Neck + head
-    add(body, limb(0.085 * h, [nr, nr * 1.08]), 0, 0.905 * h, 0.004 * h);
-    ellipsoid(body, 0.044 * h, 0.064 * h, 0.054 * h, 0, h - 0.064 * h, 0.006 * h);
-
-    // Shoulder girdle bridging torso and arms
+    // Spine: upper torso, shoulder girdle
+    curJ = 'spine';
+    const spine = joint('spine', root, 0, yS - yP, 0);
+    const upper = add(spine, smoothLathe(prof([
+      [0.0001, 0.572], [wr * 0.93, 0.588], [wr, 0.61], [(wr + cr) / 2, 0.665], [cr, 0.72], [cr * 0.97, 0.77],
+      [cr * 0.84, 0.805], [cr * 0.55, 0.832], [nr * 1.15, 0.845], [0.0001, 0.852]], yS), 64, 96));
+    upper.scale.set(SX, 1, SZ);
+    girthRing(spine, 'Грудь', P.chest, cr, 0.72 * h, yS);
     const armTop = 0.05 * k;
     const half = sw / 2 - armTop * 0.45;
-    const girdle = add(body, limb(half * 2, [0.046 * k, 0.05 * k, 0.046 * k]), -half, 0.808 * h, -0.004 * h);
+    const girdle = add(spine, limb(half * 2, [0.046 * k, 0.05 * k, 0.046 * k]), -half, ySh - yS, -0.004 * h);
     girdle.rotation.z = Math.PI / 2; girdle.scale.z = 0.72;
 
-    // Arms (A-pose)
-    [-1, 1].forEach(side => {
-      const sh = new THREE.Group();
-      sh.position.set(side * half, 0.808 * h, -0.004 * h);
-      sh.rotation.z = side * 0.2;
-      body.add(sh);
+    // Neck + head
+    curJ = 'neck';
+    const neck = joint('neck', spine, 0, yN - yS, 0.004 * h);
+    add(neck, limb(0.085 * h, [nr, nr * 1.08]), 0, 0.06 * h, 0);
+    ellipsoid(neck, 0.044 * h, 0.064 * h, 0.054 * h, 0, 0.091 * h, 0.002 * h);
+
+    // Arms (L = character's left = +x)
+    [['L', 1], ['R', -1]].forEach(([s, side]) => {
+      curJ = 'sh' + s;
+      const sh = joint('sh' + s, spine, side * half, ySh - yS, -0.004 * h);
+      sh.rotation.order = 'XZY';
       ellipsoid(sh, armTop * 1.12, armTop * 1.12, armTop * 1.0, 0, 0, 0);
       const ua = 0.186 * h;
       add(sh, limb(ua, [armTop, armTop * 0.92, 0.036 * k]));
-      const el = new THREE.Group(); el.position.y = -ua; el.rotation.z = -side * 0.06; el.rotation.x = 0.08; sh.add(el);
+      curJ = 'el' + s;
+      const el = joint('el' + s, sh, 0, -ua, 0);
       const fa = 0.146 * h;
       add(el, limb(fa, [0.037 * k, 0.038 * k, 0.026 * k]));
       ellipsoid(el, 0.018 * h, 0.05 * h, 0.03 * h, 0, -fa - 0.048 * h, 0.004 * h);
@@ -368,41 +443,31 @@ td small { color: var(--muted); font-family: var(--f-body); }
     // Legs
     const kneeR = 0.021 * h * Math.sqrt(P.hips / 98), calfR = 0.032 * h * Math.sqrt(P.hips / 98), ankR = 0.0125 * h;
     const thighR = hr * 0.56;
-    [-1, 1].forEach(side => {
-      const hip = new THREE.Group();
-      hip.position.set(side * hr * SX * 0.47, 0.48 * h, 0);
-      hip.rotation.z = side * 0.035;
-      body.add(hip);
+    [['L', 1], ['R', -1]].forEach(([s, side]) => {
+      curJ = 'hip' + s;
+      const hip = joint('hip' + s, root, side * hr * SX * 0.47, yH - yP, 0);
+      hip.rotation.order = 'XZY';
       const th = 0.205 * h;
       add(hip, limb(th, [thighR, thighR * 0.86, thighR * 0.68, kneeR]));
-      const kn = new THREE.Group(); kn.position.y = -th; kn.rotation.z = -side * 0.035; hip.add(kn);
-      const sh = 0.232 * h;
-      add(kn, limb(sh, [kneeR, calfR, calfR * 0.8, ankR * 1.15, ankR]), 0, 0, -0.004 * h);
-      const foot = ellipsoid(kn, 0.027 * h, 0.022 * h, 0.072 * h, 0, -sh - 0.022 * h, 0.035 * h);
+      curJ = 'kn' + s;
+      const kn = joint('kn' + s, hip, 0, -th, 0);
+      const shin = 0.232 * h;
+      add(kn, limb(shin, [kneeR, calfR, calfR * 0.8, ankR * 1.15, ankR]), 0, 0, -0.004 * h);
+      curJ = 'an' + s;
+      const an = joint('an' + s, kn, 0, -shin, -0.004 * h);
+      const foot = ellipsoid(an, 0.027 * h, 0.022 * h, 0.072 * h, 0, -0.022 * h, 0.035 * h);
       foot.rotation.y = side * 0.08;
     });
 
-    // Measurement rings at chest / waist / hips
-    const ringDefs = [['Грудь', P.chest, cr, 0.72], ['Талия', P.waist, wr, 0.61], ['Бёдра', P.hips, hr, 0.50]];
-    ringDefs.forEach(([name, cm, r, y]) => {
-      const pts = [];
-      for (let i = 0; i < 96; i++) {
-        const a = i / 96 * Math.PI * 2;
-        pts.push(new THREE.Vector3(Math.cos(a) * r * SX * 1.035, y * h, Math.sin(a) * r * SZ * 1.035));
-      }
-      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 120, 0.0038, 6, true), ringMat);
-      m.userData = { label: `${name} ${cm} см`, anchor: new THREE.Vector3(r * SX * 1.05, y * h, 0) };
-      rings.add(m);
-    });
-    rings.visible = showRings;
     buildTags();
     applyMode();
-    target.y = h * 0.52;
+    applyPose(poseNow);
   }
 
   function applyMode() {
     meshes.forEach(m => {
-      m.material = mode === 'clay' ? clayMat : mode === 'wire' ? wireMat : hiddenMat;
+      const sel = poseTabOpen && m.userData.joint === selJoint;
+      m.material = mode === 'clay' ? (sel ? selMat : clayMat) : mode === 'wire' ? (sel ? selWireMat : wireMat) : hiddenMat;
       m.children[0].visible = mode === 'points';
     });
   }
@@ -410,30 +475,286 @@ td small { color: var(--muted); font-family: var(--f-body); }
   function applyTheme() {
     renderer.setClearColor(new THREE.Color(css('--stage')), 1);
     clayMat.color.set(css('--clay'));
+    selMat.color.set(css('--clay')); selMat.emissive.set(css('--accent'));
     wireMat.color.set(css('--ink'));
+    selWireMat.color.set(css('--accent'));
     ptsMat.color.set(css('--ink'));
     ringMat.color.set(css('--accent'));
+    stoolMat.color.set(css('--muted'));
     drawTurntable();
     drawDialTicks();
   }
+
+  /* ---------- Poses ----------
+     Angles in degrees, anatomical meaning:
+     sh/hip [forward raise, sideways raise, inward rotation], el/kn [bend], an [toes down],
+     spine [bend forward, bend to the left, twist], neck [nod, tilt left, turn left], root [pitch forward, turn, roll]. */
+  const JOINTS = {
+    root: { name: 'Всё тело', dof: [['Наклон', -100, 135], ['Поворот', -180, 180], ['Крен', -95, 95]] },
+    spine: { name: 'Корпус', dof: [['Наклон вперёд', -40, 95], ['Наклон вбок', -55, 55], ['Скручивание', -60, 60]] },
+    neck: { name: 'Голова', dof: [['Кивок', -45, 60], ['Наклон вбок', -40, 40], ['Поворот', -80, 80]] },
+    shL: { name: 'Плечо Л', dof: [['Вперёд', -60, 180], ['В сторону', -20, 180], ['Ротация внутрь', -90, 100]] },
+    shR: { name: 'Плечо П', dof: [['Вперёд', -60, 180], ['В сторону', -20, 180], ['Ротация внутрь', -90, 100]] },
+    elL: { name: 'Локоть Л', dof: [['Сгиб', 0, 150]] },
+    elR: { name: 'Локоть П', dof: [['Сгиб', 0, 150]] },
+    hipL: { name: 'Бедро Л', dof: [['Вперёд', -60, 140], ['В сторону', -30, 90], ['Ротация внутрь', -90, 60]] },
+    hipR: { name: 'Бедро П', dof: [['Вперёд', -60, 140], ['В сторону', -30, 90], ['Ротация внутрь', -90, 60]] },
+    knL: { name: 'Колено Л', dof: [['Сгиб', 0, 160]] },
+    knR: { name: 'Колено П', dof: [['Сгиб', 0, 160]] },
+    anL: { name: 'Стопа Л', dof: [['Носок вниз', -30, 70]] },
+    anR: { name: 'Стопа П', dof: [['Носок вниз', -30, 70]] },
+  };
+  const JKEYS = Object.keys(JOINTS);
+  const PAIRS = ['sh', 'el', 'hip', 'kn', 'an'];
+  const neutral = () => ({
+    root: [0, 0, 0], spine: [0, 0, 0], neck: [0, 0, 0],
+    shL: [0, 10, 0], shR: [0, 10, 0], elL: [8], elR: [8],
+    hipL: [0, 3, 0], hipR: [0, 3, 0], knL: [2], knR: [2], anL: [0], anR: [0],
+  });
+  // "sh" sets both shoulders, "shL"/"shR" one side
+  function mk(o) {
+    const p = neutral();
+    Object.entries(o).forEach(([key, v]) => {
+      if (PAIRS.includes(key)) { p[key + 'L'] = [...v]; p[key + 'R'] = [...v]; } else p[key] = [...v];
+    });
+    return p;
+  }
+  const clonePose = (p) => Object.fromEntries(JKEYS.map(key => [key, [...p[key]]]));
+
+  const LIB = [
+    // Базовые
+    ['A-поза', 'Базовые', { sh: [0, 35, 0], hip: [0, 6, 0] }],
+    ['T-поза', 'Базовые', { sh: [0, 90, 0], el: [0] }],
+    ['Стойка смирно', 'Базовые', { sh: [0, 4, 0], el: [4], hip: [0, 1, 0], kn: [0] }],
+    ['Руки на поясе', 'Базовые', { sh: [0, 45, 70], el: [105], hip: [0, 6, 0] }],
+    ['Руки скрещены', 'Базовые', { sh: [30, 12, 75], el: [115] }],
+    ['Руки за спиной', 'Базовые', { sh: [-35, 12, 85], el: [85] }],
+    ['Руки вверх', 'Базовые', { sh: [0, 170, 0], el: [5] }],
+    ['Руки вперёд', 'Базовые', { sh: [90, 8, 0], el: [0] }],
+    ['Приветствие', 'Базовые', { shR: [0, 90, -90], elR: [90], neck: [0, -6, 0] }],
+    ['Скан: A-поза 45°', 'Базовые', { sh: [0, 45, 0], el: [0], hip: [0, 10, 0], kn: [0] }],
+    // Повседневные
+    ['Шаг', 'Повседневные', { hipL: [25, 3, 0], knL: [10], hipR: [-15, 3, 0], knR: [15], anR: [10], shL: [-20, 8, 0], shR: [25, 8, 0], elL: [10], elR: [25], spine: [3, 0, -5] }],
+    ['Бег', 'Повседневные', { hipL: [55, 3, 0], knL: [75], hipR: [-20, 3, 0], knR: [60], anR: [25], shL: [-45, 12, 0], elL: [90], shR: [50, 12, 0], elR: [90], spine: [12, 0, 0] }],
+    ['Сидя на стуле', 'Повседневные', { hip: [90, 6, 0], kn: [90], sh: [20, 10, 20], el: [60], spine: [5, 0, 0] }, 'stool'],
+    ['Нога на ногу', 'Повседневные', { hipR: [90, 4, 0], knR: [90], hipL: [105, -14, 15], knL: [80], anL: [30], sh: [15, 12, 30], el: [70] }, 'stool'],
+    ['Сидя по-турецки', 'Повседневные', { hip: [80, 45, -55], kn: [145], sh: [20, 12, 10], el: [55], spine: [8, 0, 0] }],
+    ['На коленях', 'Повседневные', { hip: [0, 4, 0], kn: [90], an: [55], sh: [0, 10, 0] }],
+    ['На корточках', 'Повседневные', { root: [25, 0, 0], hip: [115, 20, 0], kn: [140], an: [-25], spine: [10, 0, 0], sh: [60, 15, 0], el: [30] }],
+    ['Лёжа на спине', 'Повседневные', { root: [-90, 0, 0], sh: [0, 20, 0], hip: [0, 6, 0], an: [40] }],
+    ['Лёжа на боку', 'Повседневные', { root: [0, 0, 90], hip: [30, 0, 0], kn: [45], shR: [80, 0, 0], elR: [100], shL: [20, 5, 0] }],
+    ['Звонок по телефону', 'Повседневные', { shR: [30, 30, 10], elR: [145], neck: [0, -8, 0], shL: [0, 8, 0] }],
+    ['Задумчивость', 'Повседневные', { shR: [40, 10, 40], elR: [140], shL: [25, 8, 80], elL: [95], neck: [15, 0, 0] }],
+    ['Пожимание плечами', 'Повседневные', { sh: [10, 25, -60], el: [90], neck: [0, 10, 0] }],
+    ['Руки в карманах', 'Повседневные', { sh: [-10, 10, 20], el: [30], hipL: [5, 3, 0], knL: [10] }],
+    ['Указывает рукой', 'Повседневные', { shR: [90, 15, 0], elR: [0], spine: [0, 0, -10], neck: [0, 0, -15] }],
+    ['Селфи', 'Повседневные', { shR: [110, 25, 0], elR: [25], neck: [-5, -10, 15], shL: [0, 45, 70], elL: [105] }],
+    ['Опора на ногу', 'Повседневные', { root: [0, 0, 4], hipL: [8, 10, 0], knL: [20], hipR: [0, 0, 0], sh: [0, 8, 0] }],
+    // Спорт
+    ['Приседание', 'Спорт', { root: [30, 0, 0], hip: [110, 18, 0], kn: [100], an: [-20], spine: [10, 0, 0], sh: [60, 5, 0], el: [0], neck: [-20, 0, 0] }],
+    ['Выпад', 'Спорт', { hipL: [80, 3, 0], knL: [85], hipR: [-25, 3, 0], knR: [95], anR: [45], sh: [0, 12, 0] }],
+    ['Планка', 'Спорт', { root: [75, 0, 0], sh: [85, 8, 0], el: [0], an: [-20], neck: [-20, 0, 0] }],
+    ['Отжимание, низ', 'Спорт', { root: [88, 0, 0], sh: [20, 45, 0], el: [100], an: [-20], neck: [-25, 0, 0] }],
+    ['Прыжок звёздочкой', 'Спорт', { sh: [0, 150, 0], el: [5], hip: [0, 28, 0], kn: [5], an: [30] }],
+    ['Стойка боксёра', 'Спорт', { root: [0, -25, 0], shL: [55, 20, 45], elL: [120], shR: [40, 25, 45], elR: [135], hipL: [15, 8, 0], knL: [15], hipR: [-10, 8, 0], knR: [20], spine: [10, 0, 15] }],
+    ['Прямой удар', 'Спорт', { root: [0, -25, 0], shL: [90, 5, 0], elL: [0], shR: [40, 25, 45], elR: [135], hipL: [15, 8, 0], knL: [15], hipR: [-10, 8, 0], knR: [20], spine: [10, 0, 35] }],
+    ['Удар по мячу', 'Спорт', { hipR: [75, 5, 0], knR: [10], anR: [40], hipL: [-5, 3, 0], knL: [15], shL: [20, 70, 0], shR: [-20, 40, 0], spine: [-8, 0, 10] }],
+    ['Бросок в кольцо', 'Спорт', { shR: [160, 10, 0], elR: [70], shL: [150, 15, 30], elL: [80], hip: [10, 3, 0], kn: [25], an: [25] }],
+    ['Подача в теннисе', 'Спорт', { shR: [170, 20, 0], elR: [100], shL: [150, 0, 0], elL: [0], spine: [-15, 0, 0], neck: [-30, 0, 0] }],
+    ['Вратарь', 'Спорт', { sh: [40, 70, 0], el: [20], hip: [45, 25, 0], kn: [60], an: [-15], spine: [30, 0, 0], neck: [-25, 0, 0] }],
+    ['Жим над головой', 'Спорт', { sh: [0, 160, 0], el: [0], hip: [0, 10, 0], kn: [0] }],
+    ['Растяжка бедра', 'Спорт', { hipL: [-20, 3, 0], knL: [150], shL: [-30, 8, 30], elL: [60], shR: [0, 70, 0] }],
+    ['Наклон к носкам', 'Спорт', { root: [50, 0, 0], spine: [50, 0, 0], hip: [50, 4, 0], kn: [0], sh: [80, 5, 0], el: [0], neck: [20, 0, 0] }],
+    ['Растяжка вбок', 'Спорт', { spine: [0, 30, 0], shR: [0, 170, 0], elR: [10], shL: [0, 10, 0], hip: [0, 10, 0] }],
+    // Йога
+    ['Дерево', 'Йога', { hipL: [40, 60, -60], knL: [140], anL: [30], sh: [5, 168, 0], el: [10] }],
+    ['Воин I', 'Йога', { hipL: [80, 3, 0], knL: [85], hipR: [-30, 3, -30], knR: [0], anR: [20], sh: [175, 10, 0], spine: [-10, 0, 0] }],
+    ['Воин II', 'Йога', { hipL: [60, 45, -70], knL: [80], hipR: [0, 35, 0], knR: [0], sh: [0, 90, 0], el: [0], neck: [0, 0, 70] }],
+    ['Собака мордой вниз', 'Йога', { root: [125, 0, 0], hip: [100, 8, 0], kn: [0], an: [-20], sh: [175, 10, 0], el: [0], neck: [-10, 0, 0] }],
+    ['Треугольник', 'Йога', { hip: [0, 30, 0], kn: [0], spine: [0, 50, 0], sh: [0, 90, 0], el: [0], neck: [0, 0, -30] }],
+    ['Поза стула', 'Йога', { root: [30, 0, 0], hip: [90, 4, 0], kn: [70], an: [-25], sh: [170, 10, 0], el: [0] }],
+    ['Лотос', 'Йога', { hip: [85, 45, -60], kn: [150], sh: [10, 20, 0], el: [30] }],
+    ['Поза ребёнка', 'Йога', { root: [100, 0, 0], hip: [140, 10, 0], kn: [150], an: [60], sh: [170, 10, 0], el: [0] }],
+    ['Кобра', 'Йога', { root: [90, 0, 0], spine: [-35, 0, 0], sh: [10, 15, 0], el: [40], an: [60], neck: [-20, 0, 0] }],
+    ['Намасте', 'Йога', { sh: [20, 25, 80], el: [130] }],
+    // Танец и эмоции
+    ['Победа', 'Эмоции', { sh: [0, 145, 0], el: [10], neck: [-15, 0, 0] }],
+    ['Диско', 'Эмоции', { shR: [150, 30, 0], elR: [0], shL: [0, 45, 70], elL: [105], hipL: [20, 15, 0], knL: [20], root: [0, 20, 0], neck: [-10, 0, 0] }],
+    ['Арабеск', 'Эмоции', { root: [35, 0, 0], hipR: [-60, 5, 0], knR: [0], anR: [45], hipL: [35, 3, 0], shL: [110, 10, 0], shR: [0, 80, 0], el: [5], neck: [-30, 0, 0] }],
+    ['Поклон', 'Эмоции', { spine: [55, 0, 0], hip: [10, 3, 0], sh: [15, 6, 0], neck: [10, 0, 0] }],
+    ['Супергерой', 'Эмоции', { sh: [0, 45, 70], el: [105], hip: [0, 12, 0], neck: [-10, 0, 0], spine: [-5, 0, 0] }],
+    ['Испуг', 'Эмоции', { sh: [50, 20, 40], el: [140], spine: [15, 0, 0], neck: [15, 0, 0], hip: [15, 6, 0], kn: [20] }],
+    ['Аплодисменты', 'Эмоции', { sh: [45, 15, 60], el: [80] }],
+    ['Объятия', 'Эмоции', { sh: [80, 30, 40], el: [50], spine: [5, 0, 0] }],
+  ].map(([name, cat, o, prop]) => ({ name, cat, pose: mk(o), prop }));
+
+  let poseNow = clonePose(LIB[0].pose), poseFrom = null, poseTo = null, poseT = 0, poseProp = null;
+  let selJoint = 'shR', poseTabOpen = false;
+  const box = new THREE.Box3();
+
+  // Stool prop for seated poses
+  const stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 1, 40), stoolMat);
+  stool.visible = false; scene.add(stool);
+
+  function applyPose(p) {
+    if (!J.root) return;
+    const d = Math.PI / 180;
+    J.root.rotation.set(p.root[0] * d, p.root[1] * d, p.root[2] * d);
+    J.spine.rotation.set(p.spine[0] * d, p.spine[2] * d, -p.spine[1] * d);
+    J.neck.rotation.set(p.neck[0] * d, p.neck[2] * d, -p.neck[1] * d);
+    [['L', 1], ['R', -1]].forEach(([s, side]) => {
+      const sh = p['sh' + s], hp = p['hip' + s];
+      J['sh' + s].rotation.set(-sh[0] * d, -side * sh[2] * d, side * sh[1] * d);
+      J['el' + s].rotation.set(-p['el' + s][0] * d, 0, 0);
+      J['hip' + s].rotation.set(-hp[0] * d, -side * hp[2] * d, side * hp[1] * d);
+      J['kn' + s].rotation.set(p['kn' + s][0] * d, 0, 0);
+      J['an' + s].rotation.set(p['an' + s][0] * d, 0, 0);
+    });
+    ground();
+  }
+
+  // Put the lowest point of the body on the turntable; centre lying poses on it
+  function ground() {
+    J.root.position.set(0, pelvisY, 0);
+    body.updateMatrixWorld(true);
+    box.setFromObject(body);
+    J.root.position.y -= box.min.y;
+    const lying = Math.abs(poseNow.root[0]) > 40 || Math.abs(poseNow.root[2]) > 40;
+    if (lying) { J.root.position.x -= (box.min.x + box.max.x) / 2; J.root.position.z -= (box.min.z + box.max.z) / 2; }
+    targetY = (box.max.y - box.min.y) * 0.5;
+    body.updateMatrixWorld(true);
+    stool.visible = poseProp === 'stool';
+    if (stool.visible) {
+      const pw = new THREE.Vector3(); J.root.getWorldPosition(pw);
+      const top = pw.y - rOf(P.hips) * 0.85;
+      stool.scale.set(1, top, 1);
+      stool.position.set(pw.x, top / 2, pw.z + 0.06);
+    }
+  }
+
+  function setPose(entry, instant) {
+    poseProp = entry.prop || null;
+    if (instant || reduceMotion) { poseNow = clonePose(entry.pose); poseTo = null; applyPose(poseNow); syncJointSliders(); return; }
+    poseFrom = clonePose(poseNow); poseTo = clonePose(entry.pose); poseT = 0;
+  }
+  function tweenPose(dt) {
+    if (!poseTo) return;
+    poseT = Math.min(1, poseT + dt / 0.55);
+    const e = poseT < 0.5 ? 2 * poseT * poseT : 1 - Math.pow(-2 * poseT + 2, 2) / 2;
+    JKEYS.forEach(key => { poseNow[key] = poseFrom[key].map((v, i) => v + (poseTo[key][i] - v) * e); });
+    applyPose(poseNow);
+    if (poseT >= 1) { poseNow = poseTo; poseTo = null; syncJointSliders(); }
+  }
+
+  /* ---------- Pose library UI ---------- */
+  const STORE_KEY = 'silhouette360.poses';
+  let mine = [];
+  try { mine = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch (e) { mine = []; }
+  const saveMine = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(mine)); } catch (e) { msg('Не удалось сохранить в браузере: хранилище недоступно.'); } };
+  const CATS = ['Все', 'Базовые', 'Повседневные', 'Спорт', 'Йога', 'Эмоции', 'Мои'];
+  let cat = 'Все', query = '', activeName = LIB[0].name;
+  const grid = $('#poseGrid');
+
+  $('#poseCats').innerHTML = CATS.map(c => `<button data-cat="${c}" class="${c === cat ? 'on' : ''}">${c}</button>`).join('');
+  $$('#poseCats button').forEach(b => b.addEventListener('click', () => { cat = b.dataset.cat; $$('#poseCats button').forEach(x => x.classList.toggle('on', x === b)); renderGrid(); }));
+  $('#poseSearch').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); renderGrid(); });
+
+  function allPoses() { return LIB.concat(mine.map(m => ({ ...m, cat: 'Мои', own: true }))); }
+  function renderGrid() {
+    const list = allPoses().filter(p => (cat === 'Все' || p.cat === cat) && (!query || (p.name + ' ' + p.cat).toLowerCase().includes(query)));
+    $('#poseCount').textContent = `· ${LIB.length} готовых${mine.length ? ', ' + mine.length + ' своих' : ''}`;
+    grid.innerHTML = list.length ? list.map((p, i) => `<div class="pose-item${p.name === activeName ? ' on' : ''}">
+        <button data-i="${i}" class="pose-btn"><span>${esc(p.name)}</span><small>${p.cat}</small></button>
+        ${p.own ? `<button class="pose-del" data-del="${esc(p.name)}" aria-label="Удалить позу ${esc(p.name)}">×</button>` : ''}</div>`).join('')
+      : `<p class="note">${cat === 'Мои' ? 'Своих поз пока нет. Настройте суставы ниже и нажмите «Сохранить».' : 'Ничего не найдено.'}</p>`;
+    $$('.pose-btn', grid).forEach(b => b.addEventListener('click', () => { const p = list[+b.dataset.i]; activeName = p.name; stopShow(); setPose(p); renderGrid(); }));
+    $$('.pose-del', grid).forEach(b => b.addEventListener('click', () => { mine = mine.filter(m => m.name !== b.dataset.del); saveMine(); renderGrid(); msg('Поза удалена.'); }));
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // Slideshow through the library
+  let showTimer = null;
+  function stopShow() { if (showTimer) { clearInterval(showTimer); showTimer = null; $('#showBtn').textContent = 'Слайд-шоу'; $('#showBtn').classList.remove('on'); } }
+  $('#showBtn').addEventListener('click', () => {
+    if (showTimer) return stopShow();
+    let i = Math.max(0, LIB.findIndex(p => p.name === activeName));
+    const step = () => { i = (i + 1) % LIB.length; activeName = LIB[i].name; setPose(LIB[i]); renderGrid(); };
+    step(); showTimer = setInterval(step, 1800);
+    $('#showBtn').textContent = 'Стоп'; $('#showBtn').classList.add('on');
+  });
+
+  /* ---------- Custom pose editor ---------- */
+  const msg = (t) => { $('#poseMsg').textContent = t; };
+  $('#jointChips').innerHTML = JKEYS.map(key => `<button data-j="${key}">${JOINTS[key].name}</button>`).join('');
+  $$('#jointChips button').forEach(b => b.addEventListener('click', () => selectJoint(b.dataset.j)));
+  function selectJoint(key) {
+    selJoint = key;
+    $$('#jointChips button').forEach(b => b.classList.toggle('on', b.dataset.j === key));
+    const js = $('#jointSliders');
+    js.innerHTML = JOINTS[key].dof.map(([n, lo, hi], i) => `<div class="field"><div class="row"><label for="j-${i}">${n}</label><output id="jo-${i}"></output></div>
+      <input type="range" id="j-${i}" min="${lo}" max="${hi}" step="1"></div>`).join('');
+    JOINTS[key].dof.forEach((_, i) => $(`#j-${i}`).addEventListener('input', e => {
+      stopShow(); poseTo = null;
+      const v = +e.target.value;
+      poseNow[selJoint][i] = v;
+      const m = selJoint.match(/^(sh|el|hip|kn|an)([LR])$/);
+      if (m && $('#mirrorChk').checked) poseNow[m[1] + (m[2] === 'L' ? 'R' : 'L')][i] = v;
+      $(`#jo-${i}`).textContent = v + '°';
+      activeName = null; applyPose(poseNow);
+    }));
+    syncJointSliders();
+    applyMode();
+  }
+  function syncJointSliders() {
+    JOINTS[selJoint].dof.forEach((_, i) => {
+      const v = Math.round(poseNow[selJoint][i]); const el = $(`#j-${i}`); if (!el) return;
+      el.value = v; $(`#jo-${i}`).textContent = v + '°';
+    });
+  }
+  $('#resetPose').addEventListener('click', () => { stopShow(); activeName = LIB[0].name; setPose(LIB[0]); renderGrid(); msg('Сброшено в A-позу.'); });
+  $('#savePose').addEventListener('click', () => {
+    const name = $('#poseName').value.trim() || `Моя поза ${mine.length + 1}`;
+    const rounded = Object.fromEntries(JKEYS.map(key => [key, poseNow[key].map(Math.round)]));
+    mine = mine.filter(m => m.name !== name).concat({ name, pose: rounded, prop: poseProp });
+    saveMine(); activeName = name; renderGrid();
+    $('#poseName').value = '';
+    msg(`Поза «${name}» сохранена в разделе «Мои».`);
+  });
+  $('#copyPose').addEventListener('click', () => {
+    const json = JSON.stringify({ name: activeName || 'Моя поза', pose: Object.fromEntries(JKEYS.map(key => [key, poseNow[key].map(Math.round)])), prop: poseProp });
+    const ta = $('#poseJson'); ta.value = json; ta.hidden = false; $('#applyJson').hidden = false;
+    const fallback = () => { ta.focus(); ta.select(); msg('Скопируйте выделенный текст вручную.'); };
+    try { navigator.clipboard.writeText(json).then(() => msg('JSON позы скопирован.'), fallback); } catch (e) { fallback(); }
+  });
+  $('#importPose').addEventListener('click', () => { const ta = $('#poseJson'); ta.hidden = false; $('#applyJson').hidden = false; ta.value = ''; ta.focus(); msg('Вставьте JSON позы и нажмите «Применить JSON».'); });
+  $('#applyJson').addEventListener('click', () => {
+    try {
+      const o = JSON.parse($('#poseJson').value);
+      const src = o.pose || o;
+      const p = neutral();
+      JKEYS.forEach(key => { if (Array.isArray(src[key])) p[key] = p[key].map((v, i) => Number.isFinite(+src[key][i]) ? +src[key][i] : v); });
+      stopShow(); activeName = null; setPose({ pose: p, prop: o.prop }); renderGrid();
+      if (o.name) $('#poseName').value = o.name;
+      msg('Поза загружена. Нажмите «Сохранить», чтобы добавить её в «Мои».');
+    } catch (e) { msg('Не получилось прочитать JSON. Проверьте, что вставлен текст целиком.'); }
+  });
 
   /* ---------- Labels projected onto the rings ---------- */
   const tagBox = $('#tags');
   function buildTags() {
     tagBox.innerHTML = '';
-    rings.children.forEach(r => { const d = document.createElement('div'); d.className = 'tag'; d.textContent = r.userData.label; tagBox.appendChild(d); r.userData.el = d; });
+    ringMeshes.forEach(r => { const d = document.createElement('div'); d.className = 'tag'; d.textContent = r.userData.label; tagBox.appendChild(d); r.userData.el = d; });
   }
-  const tmp = new THREE.Vector3();
+  const tmp = new THREE.Vector3(), camRight = new THREE.Vector3();
   function updateTags() {
     const w = stage.clientWidth, hgt = stage.clientHeight;
-    rings.children.forEach(r => {
+    camRight.set(Math.cos(az), 0, -Math.sin(az));
+    ringMeshes.forEach(r => {
       const el = r.userData.el; if (!el) return;
       el.hidden = !showRings || scanning;
-      // put the label on whichever side of the body faces the camera's right
-      tmp.copy(r.userData.anchor);
-      const sideX = Math.cos(az), sideZ = -Math.sin(az);
-      tmp.set(sideX * r.userData.anchor.x, r.userData.anchor.y, sideZ * r.userData.anchor.x * SZ / SX);
-      tmp.project(camera);
+      tmp.set(0, r.userData.y, 0); r.parent.localToWorld(tmp);
+      tmp.addScaledVector(camRight, r.userData.r).project(camera);
       el.style.left = ((tmp.x + 1) / 2 * w) + 'px';
       el.style.top = ((1 - tmp.y) / 2 * hgt) + 'px';
     });
@@ -455,7 +776,18 @@ td small { color: var(--muted); font-family: var(--f-body); }
     p.x = e.clientX; p.y = e.clientY;
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); dist = clampD(dist0 * pinch0 / d); }
   });
-  const up = e => ptrs.delete(e.pointerId);
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let downAt = null;
+  cv.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY }; });
+  const up = e => {
+    ptrs.delete(e.pointerId);
+    if (!downAt || !poseTabOpen || e.type !== 'pointerup' || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
+    const r = cv.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(meshes, false)[0];
+    if (hit) { selectJoint(hit.object.userData.joint); setSpin(false); }
+  };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); dist = clampD(dist * (1 + e.deltaY * 0.001)); }, { passive: false });
   const clampD = d => Math.max(1.6, Math.min(8, d));
@@ -502,7 +834,7 @@ td small { color: var(--muted); font-family: var(--f-body); }
     const prevMode = mode;
     const segs = $$('path', ring); segs.forEach(s => s.setAttribute('fill', 'var(--line)'));
     const lis = $$('li', stList); lis.forEach(l => l.className = '');
-    mode = 'points'; applyMode(); rings.visible = false; ptsMat.opacity = 0.1;
+    mode = 'points'; applyMode(); ringMeshes.forEach(m => m.visible = false); ptsMat.opacity = 0.1;
     const wait = ms => new Promise(r => setTimeout(r, ms));
     lis[0].className = 'run'; setSpin(false);
     const start = az;
@@ -522,7 +854,7 @@ td small { color: var(--muted); font-family: var(--f-body); }
     }
     mode = prevMode === 'points' ? 'clay' : prevMode;
     $(`input[name=mode][value=${mode}]`).checked = true;
-    applyMode(); rings.visible = showRings; ptsMat.opacity = 1;
+    applyMode(); ringMeshes.forEach(m => m.visible = showRings); ptsMat.opacity = 1;
     scanning = false; $('#scanBtn').disabled = false; $('#scanBtn').textContent = 'Повторить симуляцию';
     setSpin(!reduceMotion);
   });
@@ -550,6 +882,8 @@ td small { color: var(--muted); font-family: var(--f-body); }
   let last = performance.now();
   function frame(t) {
     const dt = Math.min(0.05, (t - last) / 1000); last = t;
+    tweenPose(dt);
+    target.y += (targetY - target.y) * Math.min(1, dt * 4);
     if (animTo !== null) { az += (animTo - az) * Math.min(1, dt * 7); if (Math.abs(animTo - az) < 0.002) { az = animTo; animTo = null; } }
     else if (spin && ptrs.size === 0) az += dt * 0.35;
     camera.position.set(target.x + dist * Math.cos(elv) * Math.sin(az), target.y + dist * Math.sin(elv), target.z + dist * Math.cos(elv) * Math.cos(az));
@@ -570,6 +904,8 @@ td small { color: var(--muted); font-family: var(--f-body); }
 
   syncUI();
   rebuild();
+  selectJoint(selJoint);
+  renderGrid();
   applyTheme();
   resize();
   requestAnimationFrame(frame);
