@@ -77,7 +77,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .pane { padding: 16px; overflow-y: auto; display: grid; gap: 16px; align-content: start; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
-.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; position: relative; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg input:checked + label { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .field { display: grid; gap: 6px; }
@@ -112,6 +112,13 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
 .pose-del { position: absolute; top: 3px; right: 3px; padding: 2px 7px; border: 0; background: transparent; color: var(--muted); font-size: 15px; }
 .chips button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .divider { height: 1px; background: var(--line); }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; }
+.thumbs:empty { display: none; }
+.thumbs canvas { width: 100%; height: auto; border-radius: 3px; display: block; }
+.thumbs canvas.bad { outline: 2px solid var(--muted); opacity: .5; }
+th { text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 4px 0; }
+th:not(:first-child), #photoMeas td:not(:first-child) { text-align: right; font-family: var(--f-mono); }
+input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
 .ringwrap { display: flex; gap: 14px; align-items: center; }
 .ringwrap svg { width: 96px; height: 96px; flex: none; }
 .ringwrap .big { font-family: var(--f-display); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
@@ -130,7 +137,7 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
 <div class="app">
   <header>
     <h1>Силуэт <span>360</span></h1>
-    <div class="sub">Прототип: параметрическая модель тела, обзор 360°, позы, мерки и симуляция скана</div>
+    <div class="sub">Прототип: параметрическая модель тела, обзор 360°, позы, мерки и 3D по фото</div>
   </header>
 
   <div class="main">
@@ -158,7 +165,7 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
         <button role="tab" aria-selected="true" data-tab="body">Тело</button>
         <button role="tab" aria-selected="false" data-tab="pose">Позы</button>
         <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
-        <button role="tab" aria-selected="false" data-tab="scan">Скан 360</button>
+        <button role="tab" aria-selected="false" data-tab="scan">Фото → 3D</button>
       </div>
 
       <div class="pane" data-pane="body">
@@ -226,11 +233,43 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
       <div class="pane" data-pane="scan" hidden>
         <div class="ringwrap">
           <svg viewBox="0 0 100 100" id="frameRing" aria-hidden="true"></svg>
-          <div><div class="big" id="frameOut">0 / 36</div><div class="note">кадров, шаг 10°</div></div>
+          <div><div class="big" id="frameOut">0 фото</div><div class="note" id="frameNote">нужно 30–60, по кругу</div></div>
         </div>
-        <p class="note">Человек стоит в A-позе, телефон обходит его по кругу (или человек поворачивается на месте). Каждые 10° сохраняется кадр с глубиной LiDAR, если она есть.</p>
+        <p class="note">Как снимать: человек стоит в A-позе на однотонном фоне, вы обходите его по кругу на одном расстоянии, телефон на уровне пояса. Первое фото — анфас, в кадре всё тело от макушки до стоп. Порядок фото берётся из имён файлов.</p>
+        <div class="field">
+          <div class="row"><label for="photoH">Рост человека, см</label></div>
+          <input type="number" id="photoH" min="120" max="220" value="178" inputmode="numeric">
+        </div>
+        <div class="field">
+          <span class="label">Направление обхода (вид сверху)</span>
+          <div class="seg">
+            <input type="radio" name="dir" id="dir-cw" value="cw" checked><label for="dir-cw">По часовой</label>
+            <input type="radio" name="dir" id="dir-ccw" value="ccw"><label for="dir-ccw">Против часовой</label>
+          </div>
+        </div>
+        <div class="chips">
+          <button class="primary" id="pickPhotos">Загрузить фото</button>
+          <button id="demoPhotos">Демо: 50 фото с модели</button>
+        </div>
+        <input type="file" id="photoFiles" accept="image/*" multiple hidden>
+        <div class="thumbs" id="thumbs"></div>
+        <div class="field">
+          <div class="row"><label for="bgThr">Порог отделения фона</label><output id="bgThrOut">38</output></div>
+          <input type="range" id="bgThr" min="12" max="90" value="38">
+        </div>
         <ul class="stages" id="stages"></ul>
-        <button class="primary" id="scanBtn">Запустить симуляцию скана</button>
+        <button id="buildBtn" disabled>Построить 3D</button>
+        <p class="note" id="photoMsg" aria-live="polite"></p>
+        <div id="resultBox" class="field" hidden>
+          <span class="label">Результат</span>
+          <div class="seg">
+            <input type="radio" name="rview" id="rv-hull" value="hull" checked><label for="rv-hull">Объём из фото</label>
+            <input type="radio" name="rview" id="rv-fit" value="fit"><label for="rv-fit">Подогнанная модель</label>
+            <input type="radio" name="rview" id="rv-both" value="both"><label for="rv-both">Вместе</label>
+          </div>
+          <table><thead><tr id="resHead"></tr></thead><tbody id="photoMeas"></tbody></table>
+          <p class="note" id="resultNote"></p>
+        </div>
       </div>
     </div>
   </div>
@@ -810,53 +849,345 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
     }
   }
 
-  /* ---------- Scan simulation ---------- */
-  const STAGES = [
-    ['Съёмка 36 кадров по кругу', 'клиент'],
-    ['Сегментация человека (SAM 2)', 'GPU'],
-    ['Позы камер + глубина', 'GPU'],
-    ['Подгонка параметрической модели', 'GPU'],
-    ['Текстура и запекание', 'GPU'],
-    ['Мерки и экспорт GLB/USDZ', 'CPU'],
-  ];
+  /* ---------- Photos → 3D (shape from silhouettes) ----------
+     1. each photo is downscaled, the person is cut from the background with a per-row background model
+     2. silhouettes are normalised by the person's height and centred on the torso
+     3. a voxel grid is carved: a voxel survives if it projects inside (almost) every silhouette
+     4. surface voxels take colour from the photo that faces them best
+     5. girths are measured on horizontal slices and the parametric model is fitted to them */
+  const PH = 320;               // processing height of a photo, px
+  const STAGE_NAMES = ['Загрузка фото', 'Отделение человека от фона', 'Выравнивание по росту', 'Вырезание объёма по силуэтам', 'Цвет из фото', 'Мерки и подгонка модели'];
+  let photos = [], truth = null, hull = null, hullPts = null, scanning = false, busy = false;
   const stList = $('#stages');
-  STAGES.forEach(([n, w]) => stList.insertAdjacentHTML('beforeend', `<li>${n}<span>${w}</span></li>`));
+  stList.innerHTML = STAGE_NAMES.map(n => `<li>${n}<span></span></li>`).join('');
+  const lis = $$('li', stList);
+  const stage_ = (i, cls, note = '') => { lis[i].className = cls; $('span', lis[i]).textContent = note; };
+  const resetStages = () => lis.forEach((_, i) => stage_(i, ''));
+  const tick = () => new Promise(r => setTimeout(r, 0));
+
+  // Coverage ring: 36 sectors of 10°
   const ring = $('#frameRing');
   for (let i = 0; i < 36; i++) {
     const a0 = (i / 36) * Math.PI * 2 + 0.03, a1 = ((i + 1) / 36) * Math.PI * 2 - 0.03, R = 44, r = 34;
     const p = (a, rad) => `${50 + Math.sin(a) * rad} ${50 - Math.cos(a) * rad}`;
     ring.insertAdjacentHTML('beforeend', `<path d="M${p(a0, R)} A${R} ${R} 0 0 1 ${p(a1, R)} L${p(a1, r)} A${r} ${r} 0 0 0 ${p(a0, r)} Z" fill="var(--line)"></path>`);
   }
-  let scanning = false;
-  $('#scanBtn').addEventListener('click', async () => {
-    if (scanning) return;
-    scanning = true; $('#scanBtn').disabled = true;
-    const prevMode = mode;
-    const segs = $$('path', ring); segs.forEach(s => s.setAttribute('fill', 'var(--line)'));
-    const lis = $$('li', stList); lis.forEach(l => l.className = '');
-    mode = 'points'; applyMode(); ringMeshes.forEach(m => m.visible = false); ptsMat.opacity = 0.1;
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    lis[0].className = 'run'; setSpin(false);
-    const start = az;
-    for (let i = 0; i < 36; i++) {
-      animTo = start + (i + 1) / 36 * Math.PI * 2;
-      segs[i].setAttribute('fill', 'var(--accent)');
-      $('#frameOut').textContent = `${i + 1} / 36`;
-      ptsMat.opacity = 0.1 + 0.6 * (i + 1) / 36;
-      await wait(70);
+  const dirSign = () => ($('input[name=dir]:checked').value === 'ccw' ? 1 : -1);
+  const angleOf = (i) => dirSign() * i * Math.PI * 2 / photos.length;
+  function drawCoverage() {
+    const lit = new Set(photos.map((p, i) => p.ok === false ? -1 : Math.floor((((angleOf(i) * 180 / Math.PI) % 360 + 360) % 360) / 10)));
+    $$('path', ring).forEach((s, i) => s.setAttribute('fill', lit.has(i) ? 'var(--accent)' : 'var(--line)'));
+    const ok = photos.filter(p => p.ok !== false).length;
+    $('#frameOut').textContent = `${photos.length} фото`;
+    $('#frameNote').textContent = photos.length ? `шаг ${(360 / photos.length).toFixed(1)}°${ok < photos.length ? `, без силуэта: ${photos.length - ok}` : ''}` : 'нужно 30–60, по кругу';
+  }
+
+  function toCanvas(src, sw, sh) {
+    const h = PH, w = Math.max(1, Math.round(sw * PH / sh));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(src, 0, 0, w, h);
+    return { canvas: c, w, h, data: ctx.getImageData(0, 0, w, h).data };
+  }
+  const loadImg = (url) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+
+  $('#pickPhotos').addEventListener('click', () => $('#photoFiles').click());
+  $('#photoFiles').addEventListener('change', async (e) => {
+    const files = [...e.target.files].filter(f => f.type.startsWith('image/'))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).slice(0, 72);
+    e.target.value = '';
+    if (!files.length || busy) return;
+    busy = true; truth = null; photos = []; resetStages(); clearResult();
+    stage_(0, 'run');
+    for (let i = 0; i < files.length; i++) {
+      const url = URL.createObjectURL(files[i]);
+      try { const im = await loadImg(url); photos.push(toCanvas(im, im.naturalWidth, im.naturalHeight)); } catch (err) { /* unreadable file is skipped */ }
+      URL.revokeObjectURL(url);
+      stage_(0, 'run', `${i + 1}/${files.length}`);
+      await tick();
     }
-    lis[0].className = 'done';
-    for (let s = 1; s < lis.length; s++) {
-      lis[s].className = 'run';
-      await wait(650);
-      if (s === 3) { ptsMat.opacity = 1; }
-      lis[s].className = 'done';
+    stage_(0, 'done', `${photos.length}`);
+    await segmentAll();
+    busy = false;
+    photoMsg(photos.length < 12 ? 'Мало фото: для приличного объёма нужно хотя бы 24, лучше 40–60.' : 'Фото загружены. Проверьте силуэты на миниатюрах и нажмите «Построить 3D».');
+  });
+  const photoMsg = (t) => { $('#photoMsg').textContent = t; };
+
+  /* Background removal: background = linear blend of the row's left and right edges (handles wall + floor and side light) */
+  function segment(p, thr) {
+    const { w, h, data } = p, m = Math.max(3, Math.round(w * 0.05));
+    const mask = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const L = [0, 0, 0], R = [0, 0, 0];
+      for (let x = 0; x < m; x++) for (let c = 0; c < 3; c++) { L[c] += data[(y * w + x) * 4 + c]; R[c] += data[(y * w + w - 1 - x) * 4 + c]; }
+      for (let c = 0; c < 3; c++) { L[c] /= m; R[c] /= m; }
+      for (let x = 0; x < w; x++) {
+        const t = x / (w - 1), i = (y * w + x) * 4;
+        const dr = data[i] - (L[0] + (R[0] - L[0]) * t), dg = data[i + 1] - (L[1] + (R[1] - L[1]) * t), db = data[i + 2] - (L[2] + (R[2] - L[2]) * t);
+        mask[y * w + x] = dr * dr + dg * dg + db * db > thr * thr ? 1 : 0;
+      }
     }
-    mode = prevMode === 'points' ? 'clay' : prevMode;
-    $(`input[name=mode][value=${mode}]`).checked = true;
-    applyMode(); ringMeshes.forEach(m => m.visible = showRings); ptsMat.opacity = 1;
-    scanning = false; $('#scanBtn').disabled = false; $('#scanBtn').textContent = 'Повторить симуляцию';
-    setSpin(!reduceMotion);
+    // keep the largest connected blob
+    const lab = new Int32Array(w * h), q = new Int32Array(w * h);
+    let best = 0, bestSize = 0, id = 0;
+    for (let s = 0; s < w * h; s++) {
+      if (!mask[s] || lab[s]) continue;
+      id++; let qh = 0, qt = 0; q[qt++] = s; lab[s] = id;
+      while (qh < qt) {
+        const c = q[qh++], cx = c % w;
+        if (cx > 0 && mask[c - 1] && !lab[c - 1]) { lab[c - 1] = id; q[qt++] = c - 1; }
+        if (cx < w - 1 && mask[c + 1] && !lab[c + 1]) { lab[c + 1] = id; q[qt++] = c + 1; }
+        if (c >= w && mask[c - w] && !lab[c - w]) { lab[c - w] = id; q[qt++] = c - w; }
+        if (c < w * (h - 1) && mask[c + w] && !lab[c + w]) { lab[c + w] = id; q[qt++] = c + w; }
+      }
+      if (qt > bestSize) { bestSize = qt; best = id; }
+    }
+    for (let s = 0; s < w * h; s++) mask[s] = lab[s] === best ? 1 : 0;
+    // fill holes: everything empty that the border cannot reach is inside the body
+    const out = new Uint8Array(w * h); let qh = 0, qt = 0;
+    const push = (s) => { if (!mask[s] && !out[s]) { out[s] = 1; q[qt++] = s; } };
+    for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+    while (qh < qt) {
+      const c = q[qh++], cx = c % w;
+      if (cx > 0) push(c - 1); if (cx < w - 1) push(c + 1); if (c >= w) push(c - w); if (c < w * (h - 1)) push(c + w);
+    }
+    for (let s = 0; s < w * h; s++) if (!out[s]) mask[s] = 1;
+    // bounding rows and torso centre
+    let y0 = -1, y1 = -1;
+    for (let y = 0; y < h && y0 < 0; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) { y0 = y; break; }
+    for (let y = h - 1; y >= 0 && y1 < 0; y--) for (let x = 0; x < w; x++) if (mask[y * w + x]) { y1 = y; break; }
+    p.mask = mask;
+    p.ok = bestSize > w * h * 0.02 && y1 - y0 > h * 0.3;
+    if (!p.ok) return;
+    let sx = 0, n = 0;
+    for (let y = Math.round(y0 + (y1 - y0) * 0.25); y < y0 + (y1 - y0) * 0.55; y++) for (let x = 0; x < w; x++) if (mask[y * w + x]) { sx += x; n++; }
+    Object.assign(p, { y0, y1, cx: n ? sx / n : w / 2 });
+  }
+
+  function drawThumb(p, i) {
+    const c = document.createElement('canvas'); c.width = p.w; c.height = p.h;
+    const ctx = c.getContext('2d'), img = ctx.createImageData(p.w, p.h), a = new THREE.Color(css('--accent'));
+    for (let s = 0; s < p.w * p.h; s++) {
+      const k = s * 4, on = p.mask && p.mask[s];
+      img.data[k] = on ? p.data[k] * 0.55 + a.r * 255 * 0.45 : p.data[k] * 0.35;
+      img.data[k + 1] = on ? p.data[k + 1] * 0.55 + a.g * 255 * 0.45 : p.data[k + 1] * 0.35;
+      img.data[k + 2] = on ? p.data[k + 2] * 0.55 + a.b * 255 * 0.45 : p.data[k + 2] * 0.35;
+      img.data[k + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    c.title = `Фото ${i + 1}, ${Math.round((((angleOf(i) * 180 / Math.PI) % 360) + 360) % 360)}°${p.ok === false ? ' — человек не найден' : ''}`;
+    if (p.ok === false) c.className = 'bad';
+    return c;
+  }
+  function renderThumbs() {
+    const box = $('#thumbs'); box.innerHTML = '';
+    photos.forEach((p, i) => box.appendChild(drawThumb(p, i)));
+  }
+
+  async function segmentAll() {
+    stage_(1, 'run');
+    const thr = +$('#bgThr').value;
+    for (let i = 0; i < photos.length; i++) { segment(photos[i], thr); if (i % 6 === 5) { stage_(1, 'run', `${i + 1}/${photos.length}`); await tick(); } }
+    const ok = photos.filter(p => p.ok).length;
+    stage_(1, ok ? 'done' : '', `${ok}/${photos.length}`);
+    renderThumbs(); drawCoverage();
+    $('#buildBtn').disabled = ok < 4;
+  }
+  $('#bgThr').addEventListener('input', e => { $('#bgThrOut').textContent = e.target.value; });
+  $('#bgThr').addEventListener('change', () => { if (photos.length && !busy) { busy = true; segmentAll().then(() => { busy = false; }); } });
+  $$('input[name=dir]').forEach(r => r.addEventListener('change', () => { if (photos.length) { renderThumbs(); drawCoverage(); } }));
+
+  /* Visual hull */
+  async function carve(H) {
+    stage_(2, 'run');
+    const views = photos.map((p, i) => ({ p, th: angleOf(i) })).filter(v => v.p.ok);
+    views.forEach(v => { v.sc = H / (v.p.y1 - v.p.y0); v.c = Math.cos(v.th); v.s = Math.sin(v.th); });
+    stage_(2, 'done', `${views.length} силуэтов`);
+
+    stage_(3, 'run');
+    const NY = 176, vox = H * 1.03 / NY, half = 0.42 * H, NX = Math.ceil(2 * half / vox), NZ = NX;
+    const miss = new Uint8Array(NX * NY * NZ);
+    const xs = Float32Array.from({ length: NX }, (_, i) => -half + (i + 0.5) * vox);
+    for (let vi = 0; vi < views.length; vi++) {
+      const { p, sc, c, s } = views[vi], { w, h, mask, cx, y1 } = p;
+      for (let iy = 0; iy < NY; iy++) {
+        const py = Math.round(y1 - ((iy + 0.5) * vox) / sc), rowOk = py >= 0 && py < h, row = py * w;
+        for (let iz = 0; iz < NZ; iz++) {
+          const zs = xs[iz] * s, base = (iy * NZ + iz) * NX;
+          for (let ix = 0; ix < NX; ix++) {
+            let inside = false;
+            if (rowOk) { const px = Math.round(cx + (xs[ix] * c - zs) / sc); inside = px >= 0 && px < w && mask[row + px] === 1; }
+            if (!inside && miss[base + ix] < 255) miss[base + ix]++;
+          }
+        }
+      }
+      if (vi % 3 === 2) { stage_(3, 'run', `${vi + 1}/${views.length}`); await tick(); }
+    }
+    const tol = Math.max(1, Math.round(views.length * 0.06));
+    const occ = new Uint8Array(NX * NY * NZ);
+    let count = 0;
+    for (let i = 0; i < occ.length; i++) if (miss[i] <= tol) { occ[i] = 1; count++; }
+    stage_(3, 'done', `${(count / 1000).toFixed(0)} тыс. вокселей`);
+    return { occ, NX, NY, NZ, vox, half, xs, views };
+  }
+
+  /* Colour the surface from the best-facing photo */
+  async function colourise(g) {
+    stage_(4, 'run');
+    const { occ, NX, NY, NZ, vox, xs, views } = g;
+    const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= NX || y >= NY || z >= NZ) ? 0 : occ[(y * NZ + z) * NX + x];
+    const pos = [], col = [], tmpC = new THREE.Color();
+    for (let iy = 0; iy < NY; iy++) {
+      for (let iz = 0; iz < NZ; iz++) for (let ix = 0; ix < NX; ix++) {
+        if (!at(ix, iy, iz)) continue;
+        const ex0 = !at(ix - 1, iy, iz), ex1 = !at(ix + 1, iy, iz), ez0 = !at(ix, iy, iz - 1), ez1 = !at(ix, iy, iz + 1), ey0 = !at(ix, iy - 1, iz), ey1 = !at(ix, iy + 1, iz);
+        if (!(ex0 || ex1 || ez0 || ez1 || ey0 || ey1)) continue;
+        const x = xs[ix], y = (iy + 0.5) * vox, z = xs[iz];
+        let nx = (ex1 ? 1 : 0) - (ex0 ? 1 : 0), nz = (ez1 ? 1 : 0) - (ez0 ? 1 : 0);
+        if (!nx && !nz) { nx = x; nz = z; }
+        let best = null, bd = -2;
+        for (const v of views) { const d = v.s * nx + v.c * nz; if (d > bd) { bd = d; best = v; } }
+        const p = best.p, px = Math.round(p.cx + (x * best.c - z * best.s) / best.sc), py = Math.round(p.y1 - y / best.sc);
+        const k = (Math.min(p.h - 1, Math.max(0, py)) * p.w + Math.min(p.w - 1, Math.max(0, px))) * 4;
+        tmpC.setRGB(p.data[k] / 255, p.data[k + 1] / 255, p.data[k + 2] / 255).convertSRGBToLinear();
+        pos.push(x, y, z); col.push(tmpC.r, tmpC.g, tmpC.b);
+      }
+      if (iy % 16 === 15) { stage_(4, 'run', `${Math.round(iy / NY * 100)}%`); await tick(); }
+    }
+    stage_(4, 'done', `${(pos.length / 3000).toFixed(0)} тыс. точек`);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    return new THREE.Points(geo, new THREE.PointsMaterial({ size: vox * 1.7, vertexColors: true, sizeAttenuation: true }));
+  }
+
+  /* Girth on a horizontal slice: the blob around the body axis (arms excluded), convex hull perimeter */
+  function slice(g, yAbs) {
+    const { occ, NX, NZ, vox, xs } = g, iy = Math.min(g.NY - 1, Math.max(0, Math.round(yAbs / vox - 0.5)));
+    const cells = new Uint8Array(NX * NZ);
+    for (let i = 0; i < NX * NZ; i++) cells[i] = occ[iy * NX * NZ + i];
+    // start from the occupied cell nearest the axis
+    let start = -1, bd = Infinity;
+    for (let iz = 0; iz < NZ; iz++) for (let ix = 0; ix < NX; ix++) if (cells[iz * NX + ix]) { const d = xs[ix] ** 2 + xs[iz] ** 2; if (d < bd) { bd = d; start = iz * NX + ix; } }
+    if (start < 0) return null;
+    const seen = new Uint8Array(NX * NZ), q = [start], pts = []; seen[start] = 1;
+    while (q.length) {
+      const c = q.pop(), ix = c % NX, iz = (c - ix) / NX; pts.push([xs[ix], xs[iz]]);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const jx = ix + dx, jz = iz + dz, j = jz * NX + jx;
+        if (jx >= 0 && jz >= 0 && jx < NX && jz < NZ && cells[j] && !seen[j]) { seen[j] = 1; q.push(j); }
+      }
+    }
+    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lo = [], hi = [];
+    for (const p of pts) { while (lo.length > 1 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+    for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (hi.length > 1 && cross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+    const hullPts = lo.slice(0, -1).concat(hi.slice(0, -1));
+    let per = 0;
+    for (let i = 0; i < hullPts.length; i++) { const a = hullPts[i], b = hullPts[(i + 1) % hullPts.length]; per += Math.hypot(a[0] - b[0], a[1] - b[1]); }
+    const minX = pts[0][0], maxX = pts[pts.length - 1][0];
+    return { circ: (per + Math.PI * vox) * 100, width: (maxX - minX + vox) * 100 };
+  }
+  function measure(g, H) {
+    const scan = (a, b, pick) => { let r = null; for (let f = a; f <= b + 1e-6; f += 0.01) { const s = slice(g, f * H); if (s && (!r || pick(s.circ, r.circ))) r = s; } return r; };
+    const chest = scan(0.70, 0.74, (x, y) => x > y), waist = scan(0.58, 0.65, (x, y) => x < y), hips = scan(0.48, 0.53, (x, y) => x > y), sh = slice(g, 0.82 * H);
+    // a silhouette hull cannot see concave areas, so it runs ~3% wide on girths
+    const K = 0.97;
+    return { height: Math.round(H * 100), chest: chest && Math.round(chest.circ * K), waist: waist && Math.round(waist.circ * K), hips: hips && Math.round(hips.circ * K), shoulders: sh && Math.round(sh.width * 0.9) };
+  }
+
+  $('#buildBtn').addEventListener('click', build);
+  async function build() {
+    if (busy) return;
+    const H = (+$('#photoH').value || 175) / 100;
+    if (H < 1.2 || H > 2.2) { photoMsg('Укажите рост от 120 до 220 см: он задаёт масштаб модели.'); return; }
+    busy = true; $('#buildBtn').disabled = true; clearResult();
+    for (let i = 2; i < lis.length; i++) stage_(i, '');
+    const g = await carve(H);
+    const pts = await colourise(g);
+    stage_(5, 'run');
+    hull = measure(g, H);
+    const lim = (k, v) => { const s = SLIDERS.find(x => x.k === k); return Math.max(s.min, Math.min(s.max, v)); };
+    Object.keys(hull).forEach(k => { if (hull[k]) P[k] = lim(k, hull[k]); });
+    syncUI(); rebuild();
+    hullPts = pts; scene.add(hullPts);
+    stage_(5, 'done');
+    showResult();
+    busy = false; $('#buildBtn').disabled = false;
+  }
+
+  const MEAS_ROWS = [['height', 'Рост'], ['chest', 'Обхват груди'], ['waist', 'Обхват талии'], ['hips', 'Обхват бёдер'], ['shoulders', 'Ширина плеч']];
+  function showResult() {
+    $('#resultBox').hidden = false;
+    $('#resHead').innerHTML = truth ? '<th>Мерка</th><th>Из фото</th><th>Эталон</th><th>Δ</th>' : '<th>Мерка</th><th>Из фото</th>';
+    $('#photoMeas').innerHTML = MEAS_ROWS.map(([k, n]) => {
+      const v = hull[k];
+      if (!truth) return `<tr><td>${n}</td><td>${v ?? '—'} см</td></tr>`;
+      const d = v == null ? '—' : (v - truth[k] > 0 ? '+' : '') + (v - truth[k]);
+      return `<tr><td>${n}</td><td>${v ?? '—'}</td><td>${truth[k]}</td><td>${d}</td></tr>`;
+    }).join('');
+    $('#resultNote').textContent = truth
+      ? 'Демо: 50 снимков отрисованы с параметрической модели, поэтому известен эталон. Объём по силуэтам не видит вогнутых мест, поэтому обхваты поправлены на −3%.'
+      : 'Рост взят из поля выше, остальное измерено на объёме из фото. Модель на вкладке «Тело» подогнана под эти мерки.';
+    $('#rv-hull').checked = true; setResultView('hull');
+    if (window.matchMedia('(max-width: 860px)').matches) stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+  function clearResult() {
+    if (hullPts) { scene.remove(hullPts); hullPts.geometry.dispose(); hullPts.material.dispose(); hullPts = null; }
+    $('#resultBox').hidden = true; setResultView('fit');
+  }
+  function setResultView(v) {
+    scanning = v === 'hull' && !!hullPts;
+    if (hullPts) hullPts.visible = v !== 'fit';
+    body.visible = v !== 'hull';
+    stool.visible = body.visible && poseProp === 'stool';
+    if (scanning) { targetY = (+$('#photoH').value || 175) / 200; }
+    else if (J.root) ground();
+  }
+  $$('input[name=rview]').forEach(r => r.addEventListener('change', () => setResultView(r.value)));
+
+  /* Demo: render 50 "photos" of the parametric model in clothes against a wall and floor */
+  $('#demoPhotos').addEventListener('click', async () => {
+    if (busy) return;
+    busy = true; clearResult(); resetStages();
+    const scanPose = LIB.find(p => p.name.startsWith('Скан'));
+    stopShow(); activeName = scanPose.name; setPose(scanPose, true); renderGrid();
+    truth = { height: P.height, chest: P.chest, waist: P.waist, hips: P.hips, shoulders: P.shoulders };
+    $('#photoH').value = P.height;
+    $('#dir-ccw').checked = true;
+    stage_(0, 'run');
+    const W = 240, Hpx = 320, N = 50, H = P.height / 100;
+    const r2 = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    r2.setSize(W, Hpx, false); r2.outputEncoding = THREE.sRGBEncoding;
+    const sc = new THREE.Scene(); sc.background = new THREE.Color('#b4bfc8');
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshLambertMaterial({ color: '#a89f92' }));
+    floor.rotation.x = -Math.PI / 2; sc.add(floor);
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x777777, 0.7));
+    const flash = new THREE.DirectionalLight(0xffffff, 0.65); sc.add(flash, flash.target);
+    const outfit = { root: '#2d3440', hipL: '#2d3440', hipR: '#2d3440', knL: '#2d3440', knR: '#2d3440', anL: '#5b3a28', anR: '#5b3a28', spine: '#3f72a6', shL: '#3f72a6', shR: '#3f72a6', elL: '#9a5f45', elR: '#9a5f45', neck: '#9a5f45' };
+    const mats = {}; Object.entries(outfit).forEach(([k, c]) => { mats[k] = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }); });
+    const clone = body.clone(true); clone.visible = true;
+    clone.traverse(o => { if (o.isPoints) o.visible = false; else if (o.isMesh) { if (o.material === ringMat) o.visible = false; else o.material = mats[o.userData.joint] || mats.spine; } });
+    sc.add(clone);
+    const half = 1.06, cam = new THREE.OrthographicCamera(-half * W / Hpx, half * W / Hpx, half, -half, 0.1, 30);
+    photos = [];
+    for (let i = 0; i < N; i++) {
+      const th = i * Math.PI * 2 / N;
+      cam.position.set(Math.sin(th) * 6, H * 0.5 + 0.35, Math.cos(th) * 6); cam.lookAt(0, H * 0.5, 0);
+      flash.position.copy(cam.position).add(new THREE.Vector3(0.8, 1.5, 0)); flash.target.position.set(0, H * 0.5, 0);
+      r2.render(sc, cam);
+      photos.push(toCanvas(r2.domElement, W, Hpx));
+      if (i % 5 === 4) { stage_(0, 'run', `${i + 1}/${N}`); await tick(); }
+    }
+    Object.values(mats).forEach(m => m.dispose()); floor.geometry.dispose(); floor.material.dispose();
+    r2.dispose(); r2.forceContextLoss();
+    stage_(0, 'done', `${N}`);
+    await segmentAll();
+    busy = false;
+    await build();
+    photoMsg('Демо готово: это результат по 50 снимкам. Загрузите свои фото, чтобы проверить на реальном человеке.');
   });
 
   /* ---------- Measurements ---------- */
