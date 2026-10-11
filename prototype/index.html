@@ -158,6 +158,21 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   .panel { overflow: visible; }
   .pane { overflow: visible; }
 }
+/* Phone turned sideways: panel with poses on the left, 3D model on the right, both full height */
+@media (orientation: landscape) and (max-height: 560px) {
+  html, body { height: 100%; }
+  .app { height: 100%; padding-block: 8px; gap: 8px; }
+  header { display: none; }
+  .main { grid-template-columns: minmax(250px, 42%) minmax(0, 1fr); gap: 8px; }
+  .panel { order: 1; overflow: hidden; }
+  .stage { order: 2; height: auto; }
+  .pane { overflow-y: auto; padding: 12px; gap: 12px; }
+  .tabs button { padding: 9px 4px; font-size: 11px; }
+  .posegrid { height: auto; max-height: none; overflow: visible; }
+  .hud-tl b { font-size: 1.2rem; }
+  .dial { width: 56px; height: 56px; }
+  .views button { padding: 6px 8px; }
+}
 @media (prefers-reduced-motion: reduce) { .stages li.run::before { animation: none; } }
 </style>
 
