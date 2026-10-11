@@ -176,6 +176,14 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   .dial { width: 56px; height: 56px; }
   .views button { padding: 6px 8px; }
 }
+/* Finger scroll slider for phones */
+.srail { position: fixed; z-index: 20; width: 26px; border-radius: 13px; background: color-mix(in srgb, var(--panel) 80%, transparent); border: 1px solid var(--line); touch-action: none; box-sizing: border-box; }
+.sthumb { position: absolute; left: 3px; right: 3px; min-height: 44px; border-radius: 10px; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+.sthumb::before, .sthumb::after { content: ""; position: absolute; left: 50%; width: 8px; height: 2px; margin-left: -4px; background: var(--on-accent); border-radius: 1px; top: calc(50% - 4px); }
+.sthumb::after { top: calc(50% + 2px); }
+.srail.drag .sthumb { filter: brightness(1.08); }
+@media (max-width: 860px), (pointer: coarse) { .app { padding-right: 36px; } }
+@media (orientation: landscape) and (max-height: 560px) { .app { padding-right: 16px; } .main { grid-template-columns: minmax(250px, 42%) minmax(0, 1fr); column-gap: 38px; } }
 @media (prefers-reduced-motion: reduce) { .stages li.run::before { animation: none; } }
 </style>
 
@@ -377,6 +385,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     </div>
   </div>
 </div>
+
+<div class="srail" id="srail" role="scrollbar" aria-orientation="vertical" aria-label="Прокрутка страницы" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div class="sthumb" id="sthumb"></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -1745,6 +1755,55 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     $('#measTable').innerHTML = rows.map(([n, v]) => `<tr><td>${n}</td><td>${v} см</td></tr>`).join('') +
       `<tr><td>Талия / бёдра <small>(WHR)</small></td><td>${whr}</td></tr>`;
   }
+
+  /* ---------- Finger scroll slider ----------
+     Scrolls the page when the page is taller than the screen, otherwise the open panel tab (landscape phone). */
+  const rail = $('#srail'), thumb = $('#sthumb');
+  const touchUI = matchMedia('(max-width: 860px), (pointer: coarse)');
+  let railTarget = null, railQueued = false;
+  function scrollTarget() {
+    const doc = document.scrollingElement || document.documentElement;
+    if (doc.scrollHeight > doc.clientHeight + 4) return doc;
+    const pane = $$('.pane[data-pane]').find(p => !p.hidden);
+    return pane && pane.scrollHeight > pane.clientHeight + 4 ? pane : null;
+  }
+  function placeRail() {
+    railQueued = false;
+    railTarget = touchUI.matches ? scrollTarget() : null;
+    rail.hidden = !railTarget;
+    if (!railTarget) return;
+    const isDoc = railTarget === (document.scrollingElement || document.documentElement);
+    const top = isDoc ? 8 : railTarget.getBoundingClientRect().top;
+    const bottom = isDoc ? innerHeight - 8 : $('.panel').getBoundingClientRect().bottom;
+    const left = isDoc ? innerWidth - 32 : $('.panel').getBoundingClientRect().right + 6;
+    Object.assign(rail.style, { top: top + 'px', height: Math.max(80, bottom - top) + 'px', left: left + 'px' });
+    const railH = Math.max(80, bottom - top), view = railTarget.clientHeight, full = railTarget.scrollHeight;
+    const th = Math.max(44, railH * view / full), maxScroll = full - view;
+    const frac = maxScroll > 0 ? railTarget.scrollTop / maxScroll : 0;
+    thumb.style.height = th + 'px';
+    thumb.style.top = (frac * (railH - th)) + 'px';
+    rail.setAttribute('aria-valuenow', Math.round(frac * 100));
+  }
+  const queueRail = () => { if (!railQueued) { railQueued = true; requestAnimationFrame(placeRail); } };
+  addEventListener('scroll', queueRail, { passive: true, capture: true });
+  addEventListener('resize', queueRail);
+  new ResizeObserver(queueRail).observe(document.body);
+  $$('.pane[data-pane]').forEach(p => new ResizeObserver(queueRail).observe(p));
+  $$('.tabs button').forEach(b => b.addEventListener('click', () => setTimeout(queueRail, 0)));
+  // drag the thumb, or tap the rail to jump there
+  let drag = null;
+  rail.addEventListener('pointerdown', e => {
+    if (!railTarget) return;
+    e.preventDefault(); rail.setPointerCapture(e.pointerId); rail.classList.add('drag');
+    const r = rail.getBoundingClientRect(), th = thumb.offsetHeight, span = r.height - th;
+    const maxScroll = railTarget.scrollHeight - railTarget.clientHeight;
+    if (e.target !== thumb) railTarget.scrollTop = Math.max(0, Math.min(1, (e.clientY - r.top - th / 2) / span)) * maxScroll;
+    drag = { y: e.clientY, s: railTarget.scrollTop, k: maxScroll / Math.max(1, span) };
+  });
+  rail.addEventListener('pointermove', e => { if (drag) railTarget.scrollTop = drag.s + (e.clientY - drag.y) * drag.k; });
+  const endDrag = () => { drag = null; rail.classList.remove('drag'); };
+  rail.addEventListener('pointerup', endDrag); rail.addEventListener('pointercancel', endDrag);
+  queueRail();
 
   /* ---------- Loop ---------- */
   function resize() {
