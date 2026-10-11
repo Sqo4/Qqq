@@ -126,6 +126,7 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
 .pose-del { position: absolute; top: 3px; right: 3px; padding: 2px 7px; border: 0; background: transparent; color: var(--muted); font-size: 15px; }
 .chips button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .divider { height: 1px; background: var(--line); }
+.sub-lib { display: grid; gap: 12px; }
 #avPreview { width: 100%; height: auto; aspect-ratio: 1; border-radius: 10px; display: block; background: var(--stage); }
 .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
 .sw { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
@@ -282,12 +283,33 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
       </div>
 
       <div class="pane" data-pane="pose" hidden>
-        <div class="field">
-          <label class="label" for="poseSearch">Библиотека поз <span id="poseCount"></span></label>
-          <div class="rowc"><input type="search" id="poseSearch" placeholder="Поиск: йога, бег, сидя…"><button id="showBtn">Слайд-шоу</button></div>
+        <div class="seg">
+          <input type="radio" name="plib" id="pl-pose" value="pose" checked><label for="pl-pose">Позы</label>
+          <input type="radio" name="plib" id="pl-anim" value="anim"><label for="pl-anim">Анимации</label>
         </div>
-        <div class="chips" id="poseCats"></div>
-        <div class="posegrid" id="poseGrid"></div>
+        <div id="poseLib" class="sub-lib">
+          <div class="field">
+            <label class="label" for="poseSearch">Библиотека поз <span id="poseCount"></span></label>
+            <div class="rowc"><input type="search" id="poseSearch" placeholder="Поиск: йога, бег, сидя…"><button id="showBtn">Слайд-шоу</button></div>
+          </div>
+          <div class="chips" id="poseCats"></div>
+          <div class="posegrid" id="poseGrid"></div>
+        </div>
+        <div id="animLib" class="sub-lib" hidden>
+          <div class="field">
+            <label class="label" for="animSearch">Библиотека анимаций <span id="animCount"></span></label>
+            <input type="search" id="animSearch" placeholder="Поиск: танец, бокс, ходьба…">
+          </div>
+          <div class="chips" id="animCats"></div>
+          <div class="posegrid" id="animGrid"></div>
+          <div class="rowc">
+            <button id="animPause" disabled>Пауза</button><button id="animStop" disabled>Стоп</button>
+          </div>
+          <div class="field">
+            <div class="row"><label for="animSpeed">Скорость</label><output id="animSpeedOut">1×</output></div>
+            <input type="range" id="animSpeed" min="0.25" max="2" step="0.25" value="1">
+          </div>
+        </div>
         <div class="divider"></div>
         <div class="field">
           <span class="label">Своя поза</span>
@@ -838,6 +860,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   }
 
   function setPose(entry, instant) {
+    if (anim) stopAnim();
     poseProp = entry.prop || null;
     if (instant || reduceMotion) { poseNow = clonePose(entry.pose); poseTo = null; applyPose(poseNow); syncJointSliders(); return; }
     poseFrom = clonePose(poseNow); poseTo = clonePose(entry.pose); poseT = 0;
@@ -888,6 +911,160 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     $('#showBtn').textContent = 'Стоп'; $('#showBtn').classList.add('on');
   });
 
+  /* ---------- Animations: looping key poses, eased between, optional lift off the floor ---------- */
+  // mirror a key pose left↔right
+  const mir = (o) => {
+    const r = {};
+    Object.entries(o).forEach(([k, v]) => {
+      if (/^(sh|el|hip|kn|an)L$/.test(k)) r[k.slice(0, -1) + 'R'] = [...v];
+      else if (/^(sh|el|hip|kn|an)R$/.test(k)) r[k.slice(0, -1) + 'L'] = [...v];
+      else if (k === 'spine' || k === 'neck' || k === 'root') r[k] = [v[0], -v[1], -v[2]];
+      else r[k] = Array.isArray(v) ? [...v] : v;
+    });
+    return r;
+  };
+  const libPose = (name, extra = {}) => { const e = LIB.find(p => p.name === name); return Object.assign(clonePose(e.pose), extra); };
+  // frequently used key poses
+  const STAND = {};
+  const walk1 = { hipL: [25, 3, 0], knL: [5], anL: [-10], hipR: [-15, 3, 0], knR: [12], anR: [15], shL: [-20, 8, 0], elL: [10], shR: [22, 8, 0], elR: [25], spine: [3, 0, -4] };
+  const walk2 = { hipL: [0, 3, 0], knL: [5], hipR: [18, 3, 0], knR: [50], anR: [10], shL: [0, 8, 0], shR: [0, 8, 0], el: [15], spine: [3, 0, 0], lift: 0.01 };
+  const run1 = { hipL: [60, 3, 0], knL: [80], hipR: [-22, 3, 0], knR: [70], anR: [30], shL: [-45, 12, 0], elL: [90], shR: [55, 12, 0], elR: [95], spine: [14, 0, -8], lift: 0.05 };
+  const march1 = { hipL: [70, 3, 0], knL: [85], shL: [-35, 10, 0], shR: [55, 10, 0], el: [20] };
+  const guard = { root: [0, -25, 0], shL: [55, 20, 45], elL: [120], shR: [40, 25, 45], elR: [135], hipL: [15, 8, 0], knL: [15], hipR: [-10, 8, 0], knR: [20], spine: [10, 0, 15] };
+  const crouch = { root: [20, 0, 0], hip: [70, 8, 0], kn: [90], an: [-20], sh: [-30, 12, 0], el: [10], spine: [15, 0, 0] };
+  const sit = { hip: [90, 6, 0], kn: [90], sh: [20, 10, 20], el: [60], spine: [5, 0, 0] };
+
+  const ANIM_SRC = [
+    // Движение
+    ['Ходьба', 'Движение', 1.1, [walk1, walk2, mir(walk1), mir(walk2)]],
+    ['Бег', 'Движение', 0.7, [run1, mir(run1)]],
+    ['Марш на месте', 'Движение', 1.0, [march1, STAND, mir(march1), STAND]],
+    ['Высокое поднимание колен', 'Движение', 0.55, [{ hipL: [95, 3, 0], knL: [95], shL: [-30, 10, 0], shR: [60, 10, 0], el: [80], lift: 0.03 }, { hipR: [95, 3, 0], knR: [95], shR: [-30, 10, 0], shL: [60, 10, 0], el: [80], lift: 0.03 }]],
+    ['Подкрадывание', 'Движение', 1.6, [{ ...walk1, root: [15, 0, 0], kn: [35], hipL: [45, 3, 0], knL: [60], sh: [30, 15, 30], el: [90] }, { root: [15, 0, 0], hip: [20, 3, 0], kn: [40], sh: [30, 15, 30], el: [90] }, mir({ ...walk1, root: [15, 0, 0], kn: [35], hipL: [45, 3, 0], knL: [60], sh: [30, 15, 30], el: [90] }), { root: [15, 0, 0], hip: [20, 3, 0], kn: [40], sh: [30, 15, 30], el: [90] }]],
+    ['Прыжок вверх', 'Движение', 1.6, [STAND, crouch, { sh: [170, 10, 0], el: [5], an: [45], kn: [5], lift: 0.38 }, crouch]],
+    ['Прыжки на месте', 'Движение', 0.6, [{ kn: [25], hip: [15, 3, 0], an: [-10] }, { an: [40], lift: 0.12 }]],
+    // Фитнес
+    ['Прыжки звёздочкой', 'Фитнес', 0.9, [{ sh: [0, 10, 0], hip: [0, 3, 0] }, { sh: [0, 160, 0], el: [5], hip: [0, 28, 0], an: [30], lift: 0.1 }]],
+    ['Приседания', 'Фитнес', 2.0, [STAND, libPose('Приседание')]],
+    ['Выпады', 'Фитнес', 3.2, [STAND, libPose('Выпад'), STAND, mir(LIB.find(p => p.name === 'Выпад').pose)]],
+    ['Отжимания', 'Фитнес', 1.6, [libPose('Планка'), libPose('Отжимание, низ')]],
+    ['Скручивания', 'Фитнес', 1.8, [{ root: [-90, 0, 0], hip: [45, 6, 0], kn: [90], sh: [40, 30, 90], el: [130] }, { root: [-55, 0, 0], spine: [35, 0, 0], hip: [80, 6, 0], kn: [90], sh: [40, 30, 90], el: [130] }]],
+    ['Берпи', 'Фитнес', 3.0, [STAND, { root: [40, 0, 0], hip: [110, 15, 0], kn: [120], sh: [80, 10, 0], el: [0], spine: [20, 0, 0] }, libPose('Планка'), { root: [40, 0, 0], hip: [110, 15, 0], kn: [120], sh: [80, 10, 0], el: [0], spine: [20, 0, 0] }, { sh: [170, 10, 0], el: [0], an: [40], lift: 0.3 }]],
+    ['Круги руками', 'Фитнес', 1.0, [{ sh: [30, 90, 0], el: [0] }, { sh: [0, 110, 0], el: [0] }, { sh: [-30, 90, 0], el: [0] }, { sh: [0, 70, 0], el: [0] }]],
+    ['Наклоны в стороны', 'Фитнес', 2.2, [{ spine: [0, 30, 0], shR: [0, 165, 0], elR: [10], hip: [0, 10, 0] }, { hip: [0, 10, 0] }, { spine: [0, -30, 0], shL: [0, 165, 0], elL: [10], hip: [0, 10, 0] }, { hip: [0, 10, 0] }]],
+    ['Наклоны вперёд', 'Фитнес', 2.4, [{ sh: [170, 10, 0], el: [0] }, libPose('Наклон к носкам')]],
+    ['Повороты корпуса', 'Фитнес', 2.0, [{ spine: [0, 0, 40], sh: [0, 80, 0], el: [90], hip: [0, 10, 0] }, { spine: [0, 0, -40], sh: [0, 80, 0], el: [90], hip: [0, 10, 0] }]],
+    ['Мах ногой', 'Фитнес', 1.4, [{ hipR: [75, 3, 0], knR: [5], anR: [30], sh: [0, 70, 0] }, { hipR: [-30, 3, 0], knR: [10], sh: [0, 70, 0], spine: [8, 0, 0] }]],
+    ['Подъём на носки', 'Фитнес', 1.4, [{ sh: [0, 10, 0] }, { an: [45], sh: [0, 30, 0], lift: 0.07 }]],
+    // Спорт
+    ['Бокс: двойка', 'Спорт', 1.4, [guard, { ...guard, shL: [90, 5, 0], elL: [0], spine: [10, 0, 35] }, guard, { ...guard, shR: [90, 10, 0], elR: [0], spine: [10, 0, -30], root: [0, -10, 0], anR: [30] }]],
+    ['Бокс: уклоны', 'Спорт', 1.2, [{ ...guard, spine: [20, 20, 15], kn: [35] }, { ...guard, spine: [20, -20, 15], kn: [35] }]],
+    ['Удар ногой', 'Спорт', 1.5, [guard, { ...guard, hipR: [95, 10, 0], knR: [5], anR: [40], spine: [-10, 0, 0] }, guard]],
+    ['Удар по мячу', 'Спорт', 1.5, [STAND, { hipR: [-40, 5, 0], knR: [80], shL: [20, 50, 0], shR: [-20, 40, 0] }, libPose('Удар по мячу'), STAND]],
+    ['Дриблинг', 'Спорт', 0.55, [{ root: [15, 0, 0], hip: [30, 10, 0], kn: [35], an: [-10], shR: [45, 20, 0], elR: [70], shL: [20, 30, 0], elL: [40] }, { root: [15, 0, 0], hip: [30, 10, 0], kn: [35], an: [-10], shR: [30, 20, 0], elR: [20], shL: [20, 30, 0], elL: [40] }]],
+    ['Бросок в кольцо', 'Спорт', 1.7, [{ hip: [35, 6, 0], kn: [50], an: [-15], shR: [100, 10, 0], elR: [120], shL: [90, 15, 30], elL: [110] }, { ...libPose('Бросок в кольцо'), lift: 0.22 }, { shR: [170, 10, 0], elR: [10], shL: [140, 15, 30], elL: [40], lift: 0.1 }, STAND]],
+    ['Подача в теннисе', 'Спорт', 1.8, [STAND, libPose('Подача в теннисе'), { shR: [60, 10, 0], elR: [10], spine: [30, 0, -30], hipR: [20, 3, 0], knR: [20] }]],
+    ['Удар в гольфе', 'Спорт', 2.4, [{ root: [20, 0, 0], kn: [15], spine: [10, 0, 0], shL: [60, -10, 0], elL: [0], shR: [60, -10, 0], elR: [10] }, { root: [20, 0, 0], kn: [15], spine: [10, 0, 70], shL: [100, -10, 0], elL: [0], shR: [120, 20, 0], elR: [90] }, { root: [10, 0, 0], kn: [10], spine: [0, 0, -70], shL: [140, 30, 0], elL: [60], shR: [130, -10, 0], elR: [0] }]],
+    ['Плавание кролем', 'Спорт', 1.4, [{ spine: [25, 0, 10], shL: [175, 10, 0], elL: [0], shR: [-40, 10, 0], elR: [10] }, { spine: [25, 0, 0], shL: [70, 10, 0], shR: [70, 10, 0], el: [30] }, { spine: [25, 0, -10], shR: [175, 10, 0], elR: [0], shL: [-40, 10, 0], elL: [10] }, { spine: [25, 0, 0], shL: [70, 10, 0], shR: [70, 10, 0], el: [30] }]],
+    // Йога
+    ['Приветствие солнцу', 'Йога', 12, [libPose('Намасте'), { sh: [175, 15, 0], el: [0], spine: [-15, 0, 0] }, libPose('Наклон к носкам'), { hipL: [80, 3, 0], knL: [90], hipR: [-40, 3, 0], knR: [100], anR: [60], sh: [10, 15, 0], el: [0], root: [30, 0, 0] }, libPose('Планка'), libPose('Кобра'), libPose('Собака мордой вниз'), libPose('Наклон к носкам'), { sh: [175, 15, 0], el: [0], spine: [-15, 0, 0] }]],
+    ['Воины по очереди', 'Йога', 8, [libPose('Воин I'), libPose('Воин II'), libPose('Треугольник'), libPose('Воин II')]],
+    ['Дерево с качанием', 'Йога', 4, [libPose('Дерево'), libPose('Дерево', { spine: [0, 10, 0], root: [0, 0, 3] }), libPose('Дерево'), libPose('Дерево', { spine: [0, -10, 0], root: [0, 0, -3] })]],
+    ['Кошка-корова', 'Йога', 3, [{ root: [90, 0, 0], hip: [90, 6, 0], kn: [90], sh: [90, 10, 0], el: [0], an: [60], spine: [25, 0, 0], neck: [35, 0, 0] }, { root: [90, 0, 0], hip: [90, 6, 0], kn: [90], sh: [90, 10, 0], el: [0], an: [60], spine: [-25, 0, 0], neck: [-35, 0, 0] }]],
+    ['Глубокое дыхание', 'Йога', 5, [{ sh: [0, 12, 0] }, { sh: [0, 60, 0], el: [5], spine: [-6, 0, 0], neck: [-10, 0, 0] }]],
+    // Танцы
+    ['Диско', 'Танцы', 1.0, [libPose('Диско'), { shR: [20, 35, 0], elR: [0], shL: [0, 45, 70], elL: [105], hipR: [20, 15, 0], knR: [20], root: [0, -20, 0], spine: [8, 0, 0] }]],
+    ['Твист', 'Танцы', 0.8, [{ kn: [30], hip: [20, 6, 0], spine: [5, 0, 30], root: [0, -20, 0], sh: [10, 40, 0], el: [90] }, { kn: [30], hip: [20, 6, 0], spine: [5, 0, -30], root: [0, 20, 0], sh: [10, 40, 0], el: [90] }]],
+    ['Флосс', 'Танцы', 0.6, [{ root: [0, 0, 8], spine: [0, 0, 15], shL: [-30, 30, 0], shR: [30, -10, 0], el: [0] }, { root: [0, 0, -8], spine: [0, 0, -15], shR: [-30, 30, 0], shL: [30, -10, 0], el: [0] }]],
+    ['Качание (хип-хоп)', 'Танцы', 0.6, [{ kn: [5], spine: [5, 0, 0], sh: [30, 30, 30], el: [90], neck: [0, 0, 0] }, { kn: [35], hip: [25, 8, 0], spine: [20, 0, 0], sh: [30, 30, 30], el: [100], neck: [20, 0, 0] }]],
+    ['Робот', 'Танцы', 1.6, [{ shL: [0, 90, 0], elL: [90], shR: [0, 90, 0], elR: [0], neck: [0, 0, 30] }, { shL: [0, 90, 0], elL: [0], shR: [0, 90, -90], elR: [90], neck: [0, 0, -30] }, { sh: [90, 10, 0], el: [0], spine: [0, 0, 30] }, { shL: [0, 90, 0], elL: [90], shR: [0, 90, 0], elR: [0], spine: [0, 0, -30] }]],
+    ['Шаффл', 'Танцы', 0.5, [{ hipL: [35, 10, 0], knL: [30], anL: [20], kn: [15], sh: [20, 25, 0], el: [70], lift: 0.04 }, { hipR: [35, 10, 0], knR: [30], anR: [20], kn: [15], sh: [20, 25, 0], el: [70], lift: 0.04 }]],
+    ['Пируэт', 'Танцы', 2.2, [{ root: [0, 0, 0], hipR: [40, 50, -60], knR: [120], an: [50], sh: [50, 40, 60], el: [60], lift: 0.06 }, { root: [0, 120, 0], hipR: [40, 50, -60], knR: [120], an: [50], sh: [50, 40, 60], el: [60], lift: 0.06 }, { root: [0, 240, 0], hipR: [40, 50, -60], knR: [120], an: [50], sh: [50, 40, 60], el: [60], lift: 0.06 }, { root: [0, 360, 0], hipR: [40, 50, -60], knR: [120], an: [50], sh: [50, 40, 60], el: [60], lift: 0.06 }]],
+    ['Балет: плие и релеве', 'Танцы', 3.0, [{ hip: [10, 30, -40], kn: [60], sh: [30, 40, 30], el: [30] }, { hip: [0, 10, -40], an: [55], sh: [165, 20, 20], el: [30], lift: 0.08 }]],
+    ['Хлопки над головой', 'Танцы', 0.6, [{ sh: [10, 160, 0], el: [10] }, { sh: [10, 140, 0], el: [20], kn: [20], hip: [10, 3, 0] }]],
+    ['Кружение', 'Танцы', 2.0, [{ root: [0, 0, 0], sh: [0, 90, 0], el: [0] }, { root: [0, 180, 0], sh: [0, 90, 0], el: [0], lift: 0.02 }, { root: [0, 360, 0], sh: [0, 90, 0], el: [0] }]],
+    // Жесты
+    ['Помахать рукой', 'Жесты', 0.8, [{ shR: [0, 100, -60], elR: [80], neck: [0, -6, 0] }, { shR: [0, 100, -95], elR: [100], neck: [0, -6, 0] }]],
+    ['Помахать двумя руками', 'Жесты', 0.8, [{ sh: [0, 120, -60], el: [70] }, { sh: [0, 120, -95], el: [100] }]],
+    ['Кивок «да»', 'Жесты', 0.8, [{ neck: [-5, 0, 0] }, { neck: [22, 0, 0] }]],
+    ['Покачать головой «нет»', 'Жесты', 0.8, [{ neck: [0, 0, 28] }, { neck: [0, 0, -28] }]],
+    ['Аплодисменты', 'Жесты', 0.45, [{ sh: [45, 15, 60], el: [80] }, { sh: [45, 30, 35], el: [80] }]],
+    ['Пожимание плечами', 'Жесты', 1.6, [STAND, libPose('Пожимание плечами'), libPose('Пожимание плечами'), STAND]],
+    ['Указать вперёд', 'Жесты', 2.0, [STAND, libPose('Указывает рукой'), libPose('Указывает рукой'), STAND]],
+    ['Воздушный поцелуй', 'Жесты', 1.6, [{ shR: [60, 15, 30], elR: [145], neck: [5, 0, 0] }, { shR: [100, 15, 0], elR: [15], neck: [-5, 0, 0] }]],
+    ['Позвать рупором', 'Жесты', 2.0, [STAND, { sh: [60, 20, 60], el: [140], spine: [-8, 0, 0], neck: [-10, 0, 0] }, { sh: [60, 20, 60], el: [140], spine: [-8, 0, 0], neck: [-10, 0, 0] }]],
+    ['Поклон', 'Жесты', 2.6, [STAND, libPose('Поклон'), libPose('Поклон'), STAND]],
+    ['Почесать голову', 'Жесты', 0.9, [{ shR: [100, 40, 0], elR: [140], neck: [5, -10, 0] }, { shR: [110, 45, 0], elR: [130], neck: [5, -10, 0] }]],
+    // Эмоции
+    ['Радость', 'Эмоции', 0.7, [{ sh: [0, 145, 0], el: [10], kn: [20], hip: [10, 3, 0] }, { sh: [0, 160, 0], el: [10], an: [35], lift: 0.15, neck: [-15, 0, 0] }]],
+    ['Грусть', 'Эмоции', 4.0, [{ spine: [18, 0, 0], neck: [30, 0, 0], sh: [5, 4, 10], el: [10] }, { spine: [22, 3, 0], neck: [35, 5, 0], sh: [5, 4, 10], el: [10] }]],
+    ['Злость', 'Эмоции', 1.0, [{ hipR: [40, 5, 0], knR: [60], sh: [10, 25, 40], el: [110], spine: [10, 0, 0], neck: [10, 0, 0] }, { sh: [10, 25, 40], el: [120], spine: [12, 0, 0], neck: [10, 0, 0], kn: [10] }]],
+    ['Смех', 'Эмоции', 0.6, [{ spine: [-12, 0, 0], neck: [-20, 0, 0], sh: [30, 20, 60], el: [100] }, { spine: [15, 0, 0], neck: [5, 0, 0], sh: [30, 20, 60], el: [100], kn: [15] }]],
+    ['Испуг', 'Эмоции', 1.4, [STAND, libPose('Испуг'), libPose('Испуг', { spine: [20, 0, 0] })]],
+    ['Ожидание', 'Эмоции', 3.0, [{ root: [0, 0, 3], hipL: [8, 10, 0], knL: [15], sh: [-10, 10, 20], el: [30] }, { root: [0, 0, -3], hipR: [8, 10, 0], knR: [15], sh: [-10, 10, 20], el: [30], neck: [0, 0, 20] }]],
+    ['Осмотреться', 'Эмоции', 3.0, [{ neck: [0, 0, 50], spine: [0, 0, 15] }, STAND, { neck: [0, 0, -50], spine: [0, 0, -15] }, STAND]],
+    // Повседневные
+    ['Разговор по телефону', 'Повседневные', 3.0, [libPose('Звонок по телефону'), libPose('Звонок по телефону', { root: [0, 0, 3], neck: [0, -12, 15], hipL: [8, 8, 0], knL: [15] })]],
+    ['Листать телефон', 'Повседневные', 1.2, [{ sh: [30, 10, 15], el: [110], neck: [35, 0, 0] }, { shL: [30, 10, 15], elL: [110], shR: [35, 12, 20], elR: [100], neck: [35, 0, 0] }]],
+    ['Пить из кружки', 'Повседневные', 2.4, [{ shR: [30, 15, 20], elR: [100] }, { shR: [50, 15, 20], elR: [145], neck: [-25, 0, 0] }]],
+    ['Сидя болтать ногами', 'Повседневные', 1.2, [{ ...sit, knL: [60], knR: [110] }, { ...sit, knL: [110], knR: [60] }], 'stool'],
+    ['Сидя смеяться', 'Повседневные', 0.7, [{ ...sit, spine: [-10, 0, 0], neck: [-15, 0, 0] }, { ...sit, spine: [20, 0, 0], neck: [5, 0, 0] }], 'stool'],
+    ['Отдых лёжа', 'Повседневные', 5.0, [{ root: [-90, 0, 0], sh: [0, 20, 0], hip: [0, 6, 0], an: [40] }, { root: [-90, 0, 0], sh: [0, 22, 0], hip: [0, 6, 0], an: [40], spine: [-4, 0, 0] }]],
+  ];
+  const ANIMS = ANIM_SRC.map(([name, cat, dur, frames, prop]) => ({
+    name, cat, dur, prop,
+    keys: frames.map(f => {
+      const { lift = 0, ...rest } = f;
+      return { pose: JKEYS.every(k => Array.isArray(rest[k])) ? clonePose(rest) : mk(rest), lift };
+    }),
+  }));
+
+  let anim = null, animT = 0, animSpeed = 1, animPaused = false;
+  function playAnim(a) {
+    stopShow(); if (posing) setPosing(false);
+    anim = a; animT = 0; animPaused = false; poseTo = null; poseProp = a.prop || null; activeName = null;
+    $('#animPause').textContent = 'Пауза'; $('#animPause').disabled = false; $('#animStop').disabled = false;
+    renderAnimGrid();
+  }
+  function stopAnim() {
+    if (!anim) return;
+    anim = null; $('#animPause').disabled = true; $('#animStop').disabled = true;
+    applyPose(poseNow); syncJointSliders(); renderAnimGrid();
+  }
+  function stepAnim(dt) {
+    if (!anim) return;
+    if (!animPaused) animT = (animT + dt * animSpeed / anim.dur) % 1;
+    const n = anim.keys.length, x = animT * n, i = Math.floor(x) % n, j = (i + 1) % n, f = x - Math.floor(x);
+    const e = (1 - Math.cos(f * Math.PI)) / 2, A = anim.keys[i], B = anim.keys[j];
+    JKEYS.forEach(k => { poseNow[k] = A.pose[k].map((v, m) => v + (B.pose[k][m] - v) * e); });
+    applyPose(poseNow);
+    const lift = A.lift + (B.lift - A.lift) * e;
+    if (lift) { J.root.position.y += lift; body.updateMatrixWorld(true); }
+  }
+
+  /* Animation library UI */
+  const ACATS = ['Все', ...[...new Set(ANIMS.map(a => a.cat))]];
+  let acat = 'Все', aquery = '';
+  $('#animCats').innerHTML = ACATS.map(c => `<button data-cat="${c}" class="${c === acat ? 'on' : ''}">${c}</button>`).join('');
+  $$('#animCats button').forEach(b => b.addEventListener('click', () => { acat = b.dataset.cat; $$('#animCats button').forEach(x => x.classList.toggle('on', x === b)); renderAnimGrid(); }));
+  $('#animSearch').addEventListener('input', e => { aquery = e.target.value.trim().toLowerCase(); renderAnimGrid(); });
+  $('#animCount').textContent = `· ${ANIMS.length}`;
+  function renderAnimGrid() {
+    const list = ANIMS.filter(a => (acat === 'Все' || a.cat === acat) && (!aquery || (a.name + ' ' + a.cat).toLowerCase().includes(aquery)));
+    $('#animGrid').innerHTML = list.length ? list.map((a, i) => `<div class="pose-item${anim === a ? ' on' : ''}"><button class="pose-btn" data-i="${i}"><span>${anim === a ? '▶ ' : ''}${esc(a.name)}</span><small>${a.cat} · ${a.dur < 1 ? a.dur.toFixed(1) : Math.round(a.dur)} с</small></button></div>`).join('') : '<p class="note">Ничего не найдено.</p>';
+    $$('#animGrid .pose-btn').forEach(b => b.addEventListener('click', () => playAnim(list[+b.dataset.i])));
+  }
+  $('#animPause').addEventListener('click', () => { if (!anim) return; animPaused = !animPaused; $('#animPause').textContent = animPaused ? 'Играть' : 'Пауза'; });
+  $('#animStop').addEventListener('click', stopAnim);
+  $('#animSpeed').addEventListener('input', e => { animSpeed = +e.target.value; $('#animSpeedOut').textContent = animSpeed.toFixed(2).replace(/0$/, '') + '×'; });
+  // Poses ↔ Animations switch inside the tab
+  $$('input[name=plib]').forEach(r => r.addEventListener('change', () => {
+    const a = r.value === 'anim';
+    $('#poseLib').hidden = a; $('#animLib').hidden = !a;
+    if (a) renderAnimGrid();
+  }));
+  renderAnimGrid();
+
   /* ---------- Custom pose editor ---------- */
   const msg = (t) => { $('#poseMsg').textContent = t; };
   $('#jointChips').innerHTML = JKEYS.map(key => `<button data-j="${key}">${JOINTS[key].name}</button>`).join('');
@@ -899,7 +1076,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     js.innerHTML = JOINTS[key].dof.map(([n, lo, hi], i) => `<div class="field"><div class="row"><label for="j-${i}">${n}</label><output id="jo-${i}"></output></div>
       <input type="range" id="j-${i}" min="${lo}" max="${hi}" step="1"></div>`).join('');
     JOINTS[key].dof.forEach((_, i) => $(`#j-${i}`).addEventListener('input', e => {
-      stopShow(); poseTo = null;
+      stopShow(); stopAnim(); poseTo = null;
       const v = +e.target.value;
       poseNow[selJoint][i] = v;
       const m = selJoint.match(/^(sh|el|hip|kn|an)([LR])$/);
@@ -1042,7 +1219,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     e.stopImmediatePropagation(); e.preventDefault();
     cv.setPointerCapture(e.pointerId);
     const key = hit.object.userData.joint;
-    selectJoint(key);
+    stopAnim(); selectJoint(key);
     poseTo = null; activeName = null;
     J[key].getWorldPosition(jW);
     grab = { key, id: e.pointerId, piv: screenOf(jW), last: [e.clientX, e.clientY] };
@@ -1954,7 +2131,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   document.addEventListener('input', e => { if (e.target.type === 'range') paintRanges(); });
   function frame(t) {
     const dt = Math.min(0.05, (t - last) / 1000); last = t;
-    tweenPose(dt);
+    if (anim) stepAnim(dt); else tweenPose(dt);
     target.y += (targetY - target.y) * Math.min(1, dt * 4);
     if (animTo !== null) { az += (animTo - az) * Math.min(1, dt * 7); if (Math.abs(animTo - az) < 0.002) { az = animTo; animTo = null; } }
     else if (spin && ptrs.size === 0) az += dt * 0.35;
