@@ -69,6 +69,8 @@ button.on { background: var(--ink); color: var(--panel); border-color: var(--ink
 button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .spacer { flex: 1; }
+#zoomOut, #zoomIn { min-width: 40px; font-size: 16px; font-weight: 600; }
+.zoom { display: flex; gap: 5px; }
 
 /* Panel */
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
@@ -191,7 +193,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   .stage canvas { grid-column: 1; grid-row: 1; }
   .views { position: static; grid-column: 2; grid-row: 1; flex-direction: column; flex-wrap: nowrap; justify-content: center; gap: 5px; padding: 5px; border-left: 1px solid var(--line); background: var(--panel); }
   .views .spacer { display: none; }
-  .views button { min-height: 34px; padding: 0 9px; font-size: 11.5px; width: 100%; }
+  .views button { min-height: 32px; padding: 0 9px; font-size: 11.5px; width: 100%; }
+  .zoom button { min-width: 0; flex: 1; }
   .dial { display: none; }
   .hud-tl { top: 5px; left: 7px; display: flex; gap: 6px; align-items: baseline; }
   .hud-tl span:first-child { display: none; }
@@ -236,6 +239,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <button data-view="90">Профиль</button>
         <button data-view="180">Спина</button>
         <span class="spacer"></span>
+        <span class="zoom"><button id="zoomOut" aria-label="Отдалить">−</button><button id="zoomIn" aria-label="Приблизить">+</button></span>
         <button id="spinBtn" class="on" aria-pressed="true">Вращение</button>
       </div>
     </div>
@@ -268,7 +272,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
           </div>
         </div>
         <div class="seg">
-          <input type="checkbox" id="ringsChk" checked><label for="ringsChk">Показывать обхваты</label>
+          <input type="checkbox" id="ringsChk"><label for="ringsChk">Показывать обхваты</label>
         </div>
       </div>
 
@@ -438,7 +442,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     { k: 'shoulders', name: 'Ширина плеч', min: 32, max: 54 },
   ];
   const P = { ...PRESETS.m };
-  let mode = 'clay', showRings = true;
+  let mode = 'clay', showRings = false;
 
   const sl = $('#sliders');
   SLIDERS.forEach(s => {
@@ -967,7 +971,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const compactStage = () => compactQ.matches || stage.clientWidth < 420;
 
   /* ---------- Orbit camera (custom, touch-friendly) ---------- */
-  let az = 0.55, elv = 0.1, dist = 4.4, spin = !reduceMotion, animTo = null;
+  let az = 0.55, elv = 0.1, dist = 5.6, spin = !reduceMotion, animTo = null;
   const target = new THREE.Vector3(0, 0.9, 0);
   const ptrs = new Map(); let pinch0 = 0, dist0 = dist;
   const cv = renderer.domElement;
@@ -996,7 +1000,9 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); dist = clampD(dist * (1 + e.deltaY * 0.001)); }, { passive: false });
-  const clampD = d => Math.max(1.6, Math.min(8, d));
+  const clampD = d => Math.max(1.6, Math.min(10, d));
+  $('#zoomOut').addEventListener('click', () => { dist = clampD(dist * 1.2); });
+  $('#zoomIn').addEventListener('click', () => { dist = clampD(dist / 1.2); });
 
   function setSpin(v) { spin = v; const b = $('#spinBtn'); b.classList.toggle('on', v); b.setAttribute('aria-pressed', v); }
   $('#spinBtn').addEventListener('click', () => setSpin(!spin));
