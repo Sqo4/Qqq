@@ -177,12 +177,13 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   .views button { padding: 6px 8px; }
 }
 /* Finger scroll slider for phones */
-.srail { position: fixed; z-index: 20; width: 26px; border-radius: 13px; background: color-mix(in srgb, var(--panel) 80%, transparent); border: 1px solid var(--line); touch-action: none; box-sizing: border-box; }
+.srail { position: fixed; z-index: 50; width: 26px; border-radius: 13px; background: var(--panel); border: 1px solid var(--line); touch-action: none; box-sizing: border-box; }
+.srail.at-right { left: auto !important; right: max(6px, env(safe-area-inset-right, 0px)); }
 .sthumb { position: absolute; left: 3px; right: 3px; min-height: 44px; border-radius: 10px; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
 .sthumb::before, .sthumb::after { content: ""; position: absolute; left: 50%; width: 8px; height: 2px; margin-left: -4px; background: var(--on-accent); border-radius: 1px; top: calc(50% - 4px); }
 .sthumb::after { top: calc(50% + 2px); }
 .srail.drag .sthumb { filter: brightness(1.08); }
-@media (max-width: 860px), (pointer: coarse) { .app { padding-right: 36px; } }
+@media (max-width: 860px), (pointer: coarse) { .app { padding-right: calc(36px + env(safe-area-inset-right, 0px)); } }
 @media (orientation: landscape) and (max-height: 560px) { .app { padding-right: 16px; } .main { grid-template-columns: minmax(250px, 42%) minmax(0, 1fr); column-gap: 38px; } }
 @media (prefers-reduced-motion: reduce) { .stages li.run::before { animation: none; } }
 </style>
@@ -1759,13 +1760,17 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   /* ---------- Finger scroll slider ----------
      Scrolls the page when the page is taller than the screen, otherwise the open panel tab (landscape phone). */
   const rail = $('#srail'), thumb = $('#sthumb');
-  const touchUI = matchMedia('(max-width: 860px), (pointer: coarse)');
+  const touchUI = matchMedia('(max-width: 860px), (pointer: coarse), (hover: none)');
+  const sideBySide = matchMedia('(orientation: landscape) and (max-height: 560px)');
   let railTarget = null, railQueued = false;
   function scrollTarget() {
-    const doc = document.scrollingElement || document.documentElement;
-    if (doc.scrollHeight > doc.clientHeight + 4) return doc;
     const pane = $$('.pane[data-pane]').find(p => !p.hidden);
-    return pane && pane.scrollHeight > pane.clientHeight + 4 ? pane : null;
+    const paneScrolls = pane && pane.scrollHeight > pane.clientHeight + 4;
+    // sideways phone: the left panel is what scrolls (the page itself only gains a few px from the safe-area padding)
+    if (sideBySide.matches) return paneScrolls ? pane : null;
+    const doc = document.scrollingElement || document.documentElement;
+    if (doc.scrollHeight > doc.clientHeight + 60) return doc;
+    return paneScrolls ? pane : null;
   }
   function placeRail() {
     railQueued = false;
@@ -1775,8 +1780,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     const isDoc = railTarget === (document.scrollingElement || document.documentElement);
     const top = isDoc ? 8 : railTarget.getBoundingClientRect().top;
     const bottom = isDoc ? innerHeight - 8 : $('.panel').getBoundingClientRect().bottom;
-    const left = isDoc ? innerWidth - 32 : $('.panel').getBoundingClientRect().right + 6;
-    Object.assign(rail.style, { top: top + 'px', height: Math.max(80, bottom - top) + 'px', left: left + 'px' });
+    rail.classList.toggle('at-right', isDoc);
+    Object.assign(rail.style, { top: top + 'px', height: Math.max(80, bottom - top) + 'px', left: isDoc ? '' : ($('.panel').getBoundingClientRect().right + 6) + 'px' });
     const railH = Math.max(80, bottom - top), view = railTarget.clientHeight, full = railTarget.scrollHeight;
     const th = Math.max(44, railH * view / full), maxScroll = full - view;
     const frac = maxScroll > 0 ? railTarget.scrollTop / maxScroll : 0;
@@ -1787,6 +1792,10 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const queueRail = () => { if (!railQueued) { railQueued = true; requestAnimationFrame(placeRail); } };
   addEventListener('scroll', queueRail, { passive: true, capture: true });
   addEventListener('resize', queueRail);
+  addEventListener('orientationchange', () => setTimeout(queueRail, 250));
+  if (window.visualViewport) visualViewport.addEventListener('resize', queueRail);
+  sideBySide.addEventListener && sideBySide.addEventListener('change', queueRail);
+  setInterval(queueRail, 1000); // late layout changes (fonts, rotation inside app views)
   new ResizeObserver(queueRail).observe(document.body);
   $$('.pane[data-pane]').forEach(p => new ResizeObserver(queueRail).observe(p));
   $$('.tabs button').forEach(b => b.addEventListener('click', () => setTimeout(queueRail, 0)));
