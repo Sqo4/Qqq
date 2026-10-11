@@ -1704,8 +1704,49 @@ function drawRoom(now) {
 }
 function drawLaptopShape() { ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(-13 * S, 0); ctx.lineTo(13 * S, 0); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-11 * S, 0); ctx.lineTo(-9 * S, -16 * S); ctx.lineTo(11 * S, -16 * S); ctx.lineTo(11 * S, 0); ctx.closePath(); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.stroke(); ctx.fillStyle = MARK; ctx.fillRect(-8 * S, -14 * S, 17 * S, 11 * S); }
 function dart(x, y, a = 1) { ctx.save(); ctx.globalAlpha = a; ctx.lineWidth = 1.6; line(x, y, x + 7 * S, y - 4 * S, 0.2); ctx.fillStyle = ACC; ctx.beginPath(); ctx.moveTo(x + 7 * S, y - 4 * S); ctx.lineTo(x + 10 * S, y - 7 * S); ctx.lineTo(x + 10 * S, y - 2 * S); ctx.closePath(); ctx.fill(); ctx.restore(); }
+let lc = null, lcx = null;
+// Night / lights-off: a darkness layer with soft holes cut by the lamp, the laptop screen and the moon, then colour casts.
+function drawLighting(now) {
+  if (!lc) { lc = document.createElement('canvas'); lcx = lc.getContext('2d'); }
+  if (lc.width !== cv.width || lc.height !== cv.height) { lc.width = cv.width; lc.height = cv.height; }
+  const c = lcx, dark = room.dark, amb = dark ? 0.88 : 0.42, x = fig.sx, dY = deskY();
+  const lampOn = night && !dark && L.lamp, lp = L.lamp;
+  const screenOn = desk.lap === 'desk' && desk.deadT <= 0 && !(fig.st === 'work' && (fig.mode === 'sleep' || fig.mode === 'drowsy'));
+  const busy = fig.st === 'work' && !fig.mode, scr = !screenOn ? 0 : (fig.st === 'work' ? 1 : 0.45) * (0.92 + (busy ? Math.sin(now / 70) * 0.04 + Math.sin(now / 23) * 0.03 : 0));
+  const sx = x + 53 * S, sy = dY - 15 * S;           // laptop screen centre; it faces the figure (to the left)
+  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, W, H);
+  c.fillStyle = dark ? `rgba(8,8,14,${amb})` : `rgba(16,20,46,${amb})`; c.fillRect(0, 0, W, H);
+  c.globalCompositeOperation = 'destination-out';
+  if (!dark) { const top = c.createLinearGradient(0, 0, 0, G - 150 * S); top.addColorStop(0, 'rgba(0,0,0,1)'); top.addColorStop(0.75, 'rgba(0,0,0,.85)'); top.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = top; c.fillRect(0, 0, W, G - 150 * S); }
+  const rg = (cx, cy, r, a, mid = 0.45) => { const g = c.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(mid, `rgba(0,0,0,${a * 0.55})`); g.addColorStop(1, 'rgba(0,0,0,0)'); return g; };
+  if (night && !room.winBroken) {   // moonlight: the window pane and a pale patch on the floor
+    c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(L.winL, L.winT, L.winR - L.winL, L.winB - L.winT);
+    const mg = c.createLinearGradient(0, L.winB, 0, G); mg.addColorStop(0, 'rgba(0,0,0,.22)'); mg.addColorStop(1, 'rgba(0,0,0,.08)');
+    c.fillStyle = mg; c.beginPath(); c.moveTo(L.winL, L.winB); c.lineTo(L.winR, L.winB); c.lineTo(L.winR - 22 * S, G + 4); c.lineTo(L.winL - 34 * S, G + 4); c.closePath(); c.fill();
+  }
+  if (lampOn) {
+    c.save(); c.beginPath(); c.moveTo(lp.A[0], lp.A[1]); c.lineTo(lp.gA[0] - 8 * S, lp.gA[1] + 6); c.lineTo(lp.gB[0] + 8 * S, lp.gB[1] + 6); c.lineTo(lp.B[0], lp.B[1]); c.closePath(); c.clip();
+    c.fillStyle = rg(lp.M[0], lp.M[1], 78 * S, 1, 0.5); c.fillRect(0, 0, W, H); c.restore();
+    c.fillStyle = rg(lp.M[0], lp.M[1], 34 * S, 0.7); c.fillRect(lp.M[0] - 40 * S, lp.M[1] - 40 * S, 80 * S, 80 * S);   // soft spill around the shade
+    c.fillStyle = rg((lp.gA[0] + lp.gB[0]) / 2, dY, 46 * S, 0.5); c.fillRect(lp.gA[0] - 60 * S, dY - 50 * S, 140 * S, 100 * S);   // pool of light on the desk
+  }
+  const screenCone = k2 => { k2.beginPath(); k2.moveTo(x + 55 * S, dY - 28 * S); k2.lineTo(x - 34 * S, dY - 78 * S); k2.lineTo(x - 34 * S, G + 2); k2.lineTo(x + 15 * S, G + 2); k2.lineTo(x + 15 * S, dY + 1); k2.lineTo(x + 51 * S, dY - 2 * S); k2.closePath(); };
+  if (scr > 0) {   // a laptop lights what is in front of the screen (the figure, the keyboard), not the space under the desk
+    c.save(); screenCone(c); c.clip(); c.fillStyle = rg(sx, sy, 72 * S, 0.95 * scr, 0.3); c.fillRect(0, 0, W, H); c.restore();
+    c.fillStyle = rg(sx + 2 * S, sy, 16 * S, 0.5 * scr); c.fillRect(sx - 20 * S, sy - 20 * S, 40 * S, 40 * S);
+  }
+  if (!dark) { const bt = c.createLinearGradient(0, G + 6, 0, G + 30 * S); bt.addColorStop(0, 'rgba(0,0,0,0)'); bt.addColorStop(1, 'rgba(0,0,0,.75)'); c.fillStyle = bt; c.fillRect(0, G + 6, W, H - G); }
+  for (const pc of [room.pc, room.neo, room.post]) if (pc) { c.fillStyle = rg(x + 62 * S, dY - 70 * S, 80 * S, 0.9); c.fillRect(x - 30 * S, dY - 160 * S, 190 * S, 180 * S); }
+  ctx.save(); ctx.drawImage(lc, 0, 0, W, H);
+  // colour casts: warm lamp, cold screen
+  if (lampOn) { ctx.save(); ctx.beginPath(); ctx.moveTo(lp.A[0], lp.A[1]); ctx.lineTo(lp.gA[0] - 8 * S, lp.gA[1] + 6); ctx.lineTo(lp.gB[0] + 8 * S, lp.gB[1] + 6); ctx.lineTo(lp.B[0], lp.B[1]); ctx.closePath(); ctx.clip();
+    const g = ctx.createRadialGradient(lp.M[0], lp.M[1], 0, lp.M[0], lp.M[1], 80 * S); g.addColorStop(0, 'rgba(255,214,110,.42)'); g.addColorStop(0.6, 'rgba(255,200,90,.16)'); g.addColorStop(1, 'rgba(255,200,90,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+  if (scr > 0) { ctx.save(); screenCone(ctx); ctx.clip(); const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 66 * S); g.addColorStop(0, `rgba(150,200,255,${0.34 * scr})`); g.addColorStop(0.5, `rgba(150,200,255,${0.12 * scr})`); g.addColorStop(1, 'rgba(150,200,255,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
+    ctx.strokeStyle = `rgba(190,225,255,${0.85 * scr})`; ctx.lineWidth = 2.6 * S / 1.15; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + 50 * S, dY - 5 * S); ctx.lineTo(x + 54 * S, dY - 25 * S); ctx.stroke(); }
+  ctx.restore();
+}
 function drawLightsAndBlackout(now) {
-  if (room.dark) { ctx.fillStyle = 'rgba(10,10,14,.86)'; ctx.fillRect(0, 0, W, H); if (desk.lap === 'desk') { const [lx, ly] = lapC(); const g = ctx.createRadialGradient(lx, ly, 2, lx, ly, 50 * S); g.addColorStop(0, 'rgba(255,210,63,.35)'); g.addColorStop(1, 'rgba(255,210,63,0)'); ctx.fillStyle = g; ctx.fillRect(lx - 60 * S, ly - 60 * S, 120 * S, 120 * S); } }
+  if (night || room.dark) drawLighting(now);
   if (!room.dark && fig.mode === 'lights') fig.mode = null;
 }
 /* ---------- the breaker: black screen, then the "closed" site ---------- */
@@ -1755,11 +1796,10 @@ function drawDesk(now) {
     const ap = [lx - 10 * S, dY - 52 * S], A = [lx - 24 * S, dY - 44 * S], B = [lx - 16 * S, dY - 38 * S], M = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
     const dl = Math.hypot(M[0] - ap[0], M[1] - ap[1]), ax = (M[0] - ap[0]) / dl, ay = (M[1] - ap[1]) / dl;
     const hit = (P, a) => { const c = Math.cos(a), s2 = Math.sin(a), dx = ax * c - ay * s2, dy = ax * s2 + ay * c, t = (dY - P[1]) / Math.max(0.2, dy); return [P[0] + dx * t, dY]; };
-    const gA = hit(A, 0.38), gB = hit(B, -0.38);
-    const g = ctx.createRadialGradient(M[0], M[1], 2, M[0] + ax * 20 * S, M[1] + ay * 20 * S, 52 * S); g.addColorStop(0, 'rgba(255,210,63,.5)'); g.addColorStop(1, 'rgba(255,210,63,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(gA[0], gA[1]); ctx.lineTo(gB[0], gB[1]); ctx.lineTo(B[0], B[1]); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(lx - 10 * S, dY - 52 * S); ctx.lineTo(lx - 24 * S, dY - 44 * S); ctx.lineTo(lx - 16 * S, dY - 38 * S); ctx.closePath(); ctx.fillStyle = MARK; ctx.fill(); ctx.stroke();
-  }
+    const gA = hit(A, 0.42), gB = hit(B, -0.42); L.lamp = { A, B, M, ax, ay, gA, gB };
+    ctx.beginPath(); ctx.moveTo(lx - 10 * S, dY - 52 * S); ctx.lineTo(lx - 24 * S, dY - 44 * S); ctx.lineTo(lx - 16 * S, dY - 38 * S); ctx.closePath(); ctx.fillStyle = '#E8B730'; ctx.fill(); ctx.stroke();
+    if (!room.dark) { ctx.save(); ctx.fillStyle = '#FFF6C8'; ctx.beginPath(); ctx.ellipse(M[0] + ax * 1.5 * S, M[1] + ay * 1.5 * S, 2.6 * S, 1.8 * S, Math.atan2(ay, ax), 0, 7); ctx.fill(); ctx.restore(); }
+  } else L.lamp = null;
 
   line(x - 11 * S, G - 15 * S, x + 9 * S, G - 15 * S); line(x - 9 * S, G - 15 * S, x - 9 * S, G); line(x + 7 * S, G - 15 * S, x + 7 * S, G); line(x - 11 * S, G - 15 * S, x - 13 * S, G - 42 * S);
   line(x + 16 * S, dY, x + 84 * S, dY); line(x + 20 * S, dY, x + 20 * S, G); line(x + 80 * S, dY, x + 80 * S, G);
@@ -2031,11 +2071,12 @@ function frame(now) {
   seed = boil * 97 + 101; drawDesk(now); drawBox(); drawParcel(); drawBowl();
   if (!['gone', 'away', 'parcel'].includes(fig.st)) { const air = clamp((standY() - fig.y) / (300 * S), 0, 1); ctx.fillStyle = `rgba(0,0,0,${0.1 * (1 - air)})`; ctx.beginPath(); ctx.ellipse(fig.x, G + 2, (16 - 8 * air) * S, 3 * S, 0, 0, 7); ctx.fill(); }
   if (fig.st === 'web' && fig.webX != null) { ctx.save(); ctx.strokeStyle = INK; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(fig.webX, fig.webY); ctx.lineTo(fig.x, fig.y - 29 * S); ctx.stroke(); for (let i = 0; i < 6; i++) { const a = Math.PI + i / 5 * Math.PI; line(fig.webX, fig.webY, fig.webX + Math.cos(a) * 6 * S, fig.webY + Math.sin(a) * 3 * S, 0.2); } ctx.restore(); }
-  seed = boil * 53 + 11; drawFigure(fig, now); drawCovered(now); drawPC(now); drawNeo(now); drawPost(now);
+  seed = boil * 53 + 11; drawFigure(fig, now); drawCovered(now);
   seed = boil * 71 + 5; drawCat(now, 'front');
   drawEffects(dt);
   if (flashT > 0) { flashT -= dt; ctx.fillStyle = `rgba(255,210,63,${clamp(flashT / 0.14, 0, 1) * 0.35})`; ctx.fillRect(0, 0, W, H); }
   drawLightsAndBlackout(now);
+  drawPC(now); drawNeo(now); drawPost(now);
   drawBubble();
   if (shakeT > 0) { shakeT -= dt; const m = clamp(shakeT / 0.5, 0, 1) * 9; const ox = (Math.random() - 0.5) * m, oy = (Math.random() - 0.5) * m; cv.style.transform = wrapEl.style.transform = `translate(${ox}px,${oy}px)`; }
   else if (cv.style.transform) { cv.style.transform = wrapEl.style.transform = ''; }
