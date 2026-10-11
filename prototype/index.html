@@ -69,6 +69,9 @@ button.on { background: var(--ink); color: var(--panel); border-color: var(--ink
 button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .spacer { flex: 1; }
+.pose-hint { left: 50%; top: 8px; transform: translateX(-50%); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: 500 11.5px/1.3 var(--f-body); text-align: center; max-width: 90%; }
+.stage.posing canvas { cursor: crosshair; touch-action: none; }
+#poseDragBtn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 #zoomOut, #zoomIn { min-width: 40px; font-size: 16px; font-weight: 600; }
 .zoom { display: flex; gap: 5px; }
 
@@ -226,6 +229,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   <div class="main">
     <div class="stage" id="stage">
       <div class="hud hud-tl"><span>азимут камеры</span><b id="azOut">0°</b><span id="viewName">анфас</span></div>
+      <div class="hud pose-hint" id="poseHint" hidden>Тяните руку, ногу, голову или корпус. Пустое место — поворот камеры.</div>
       <svg class="dial" viewBox="0 0 80 80" aria-hidden="true">
         <circle cx="40" cy="40" r="34" fill="none" stroke="var(--line)" stroke-width="6"></circle>
         <g id="dialTicks"></g>
@@ -239,6 +243,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <button data-view="90">Профиль</button>
         <button data-view="180">Спина</button>
         <span class="spacer"></span>
+        <button id="poseDragBtn" aria-pressed="false" title="Тяните части тела мышкой или пальцем">Поза рукой</button>
         <span class="zoom"><button id="zoomOut" aria-label="Отдалить">−</button><button id="zoomIn" aria-label="Приблизить">+</button></span>
         <button id="spinBtn" class="on" aria-pressed="true">Вращение</button>
       </div>
@@ -665,7 +670,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 
   function applyMode() {
     meshes.forEach(m => {
-      const sel = poseTabOpen && m.userData.joint === selJoint;
+      const sel = (poseTabOpen || posing) && m.userData.joint === selJoint;
       m.material = mode === 'clay' ? (sel ? selMat : m.userData.part === 'eye' ? eyeMat : clayMat) : mode === 'wire' ? (sel ? selWireMat : wireMat) : hiddenMat;
       m.children[0].visible = mode === 'points';
     });
@@ -696,8 +701,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     shR: { name: 'Плечо П', dof: [['Вперёд', -60, 180], ['В сторону', -20, 180], ['Ротация внутрь', -90, 100]] },
     elL: { name: 'Локоть Л', dof: [['Сгиб', 0, 150]] },
     elR: { name: 'Локоть П', dof: [['Сгиб', 0, 150]] },
-    hipL: { name: 'Бедро Л', dof: [['Вперёд', -60, 140], ['В сторону', -30, 90], ['Ротация внутрь', -90, 60]] },
-    hipR: { name: 'Бедро П', dof: [['Вперёд', -60, 140], ['В сторону', -30, 90], ['Ротация внутрь', -90, 60]] },
+    hipL: { name: 'Бедро Л', dof: [['Вперёд', -60, 140], ['В сторону', -30, 80], ['Ротация внутрь', -90, 60]] },
+    hipR: { name: 'Бедро П', dof: [['Вперёд', -60, 140], ['В сторону', -30, 80], ['Ротация внутрь', -90, 60]] },
     knL: { name: 'Колено Л', dof: [['Сгиб', 0, 160]] },
     knR: { name: 'Колено П', dof: [['Сгиб', 0, 160]] },
     anL: { name: 'Стопа Л', dof: [['Носок вниз', -30, 70]] },
@@ -1003,6 +1008,80 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const clampD = d => Math.max(1.6, Math.min(10, d));
   $('#zoomOut').addEventListener('click', () => { dist = clampD(dist * 1.2); });
   $('#zoomIn').addEventListener('click', () => { dist = clampD(dist / 1.2); });
+
+  /* ---------- Posing by hand: drag a body part, it turns in its joint and follows the pointer ---------- */
+  let posing = false, grab = null;
+  const qTmp = new THREE.Quaternion(), qPar = new THREE.Quaternion(), axisV = new THREE.Vector3(), jW = new THREE.Vector3();
+  const R2D = 180 / Math.PI;
+  function setPosing(v) {
+    posing = v;
+    const b = $('#poseDragBtn'); b.classList.toggle('on', v); b.setAttribute('aria-pressed', v);
+    stage.classList.toggle('posing', v); $('#poseHint').hidden = !v;
+    clearTimeout(setPosing.t); if (v) setPosing.t = setTimeout(() => { $('#poseHint').hidden = true; }, 4000);
+    if (v) { setSpin(false); stopShow(); }
+    applyMode();
+  }
+  $('#poseDragBtn').addEventListener('click', () => setPosing(!posing));
+  const screenOf = (v) => { const r = cv.getBoundingClientRect(), q = v.clone().project(camera); return [r.left + (q.x + 1) / 2 * r.width, r.top + (1 - q.y) / 2 * r.height]; };
+  // world rotation of a joint group → anatomical angles of our pose format (inverse of applyPose)
+  function readJoint(key) {
+    const e = J[key].rotation, d = R2D, side = key.endsWith('L') ? 1 : -1;
+    if (/^(sh|hip)[LR]$/.test(key)) return [-e.x * d, side * e.z * d, -side * e.y * d];
+    if (/^el[LR]$/.test(key)) return [-e.x * d];
+    if (/^(kn|an)[LR]$/.test(key)) return [e.x * d];
+    if (key === 'root') return [e.x * d, e.y * d, e.z * d];
+    return [e.x * d, -e.z * d, e.y * d]; // spine, neck
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (!posing || ptrs.size) return;
+    const r = cv.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(meshes, false)[0];
+    if (!hit) return; // empty space: orbit as usual
+    e.stopImmediatePropagation(); e.preventDefault();
+    cv.setPointerCapture(e.pointerId);
+    const key = hit.object.userData.joint;
+    selectJoint(key);
+    poseTo = null; activeName = null;
+    J[key].getWorldPosition(jW);
+    grab = { key, id: e.pointerId, piv: screenOf(jW), last: [e.clientX, e.clientY] };
+  }, { capture: true });
+  cv.addEventListener('pointermove', e => {
+    if (!grab || e.pointerId !== grab.id) return;
+    e.stopImmediatePropagation();
+    const [px, py] = grab.piv, a0 = Math.atan2(grab.last[1] - py, grab.last[0] - px), a1 = Math.atan2(e.clientY - py, e.clientX - px);
+    let da = a1 - a0; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+    grab.last = [e.clientX, e.clientY];
+    if (Math.abs(da) < 1e-4) return;
+    // rotate the joint around the viewing axis, so the part swings in the screen plane after the pointer
+    const g = J[grab.key];
+    camera.getWorldDirection(axisV);              // points away from the viewer
+    qTmp.setFromAxisAngle(axisV, da);             // screen angles grow clockwise (y down) = clockwise seen by the viewer
+    g.parent.getWorldQuaternion(qPar);
+    const local = qPar.clone().invert().multiply(qTmp).multiply(qPar).multiply(g.quaternion);
+    // the same orientation has two Euler solutions; keep the one closest to the current angles so limbs never flip
+    const prev = g.rotation.clone(), eA = new THREE.Euler().setFromQuaternion(local, g.rotation.order);
+    const wrap = (v) => Math.atan2(Math.sin(v), Math.cos(v));
+    const order = g.rotation.order, mid = order[1].toLowerCase(), outer = ['x', 'y', 'z'].filter(k => k !== mid);
+    const eB = eA.clone(); eB[outer[0]] = wrap(eA[outer[0]] + Math.PI); eB[outer[1]] = wrap(eA[outer[1]] + Math.PI); eB[mid] = wrap(Math.PI - eA[mid]);
+    const dist2 = (e) => ['x', 'y', 'z'].reduce((t, k) => t + wrap(e[k] - prev[k]) ** 2, 0);
+    const best = dist2(eA) <= dist2(eB) ? eA : eB;
+    ['x', 'y', 'z'].forEach(k => { best[k] = prev[k] + wrap(best[k] - prev[k]); }); // unwrap past ±180°
+    g.rotation.copy(best);
+    const vals = readJoint(grab.key), lim = JOINTS[grab.key].dof;
+    // past a natural limit the part simply stops (clamping one angle would twist the joint)
+    if (vals.some((v, i) => v < lim[i][1] - 0.5 || v > lim[i][2] + 0.5)) { g.rotation.copy(prev); return; }
+    poseNow[grab.key] = vals.map((v, i) => Math.max(lim[i][1], Math.min(lim[i][2], v)));
+    const m = grab.key.match(/^(sh|el|hip|kn|an)([LR])$/);
+    if (m && $('#mirrorChk').checked) poseNow[m[1] + (m[2] === 'L' ? 'R' : 'L')] = [...poseNow[grab.key]];
+    applyPose(poseNow);
+    J[grab.key].getWorldPosition(jW); grab.piv = screenOf(jW); // the pivot can move when the body re-grounds
+    syncJointSliders();
+  }, { capture: true });
+  const endLimb = (e) => { if (grab && e.pointerId === grab.id) { e.stopImmediatePropagation(); grab = null; renderGrid(); downAt = null; } };
+  cv.addEventListener('pointerup', endLimb, { capture: true });
+  cv.addEventListener('pointercancel', endLimb, { capture: true });
 
   function setSpin(v) { spin = v; const b = $('#spinBtn'); b.classList.toggle('on', v); b.setAttribute('aria-pressed', v); }
   $('#spinBtn').addEventListener('click', () => setSpin(!spin));
