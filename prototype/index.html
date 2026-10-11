@@ -77,13 +77,22 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .pane { padding: 16px; overflow-y: auto; display: grid; gap: 16px; align-content: start; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
-.seg { display: flex; gap: 6px; flex-wrap: wrap; position: relative; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; position: relative; }
+.seg label { display: inline-flex; align-items: center; box-sizing: border-box; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg input:checked + label { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .field { display: grid; gap: 6px; }
 .field .row { display: flex; justify-content: space-between; align-items: baseline; }
 .field output { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 13px; }
-input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+input[type=range] { width: 100%; margin: 0; height: 30px; background: transparent; -webkit-appearance: none; appearance: none; --p: 50%; }
+input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--p), var(--line) var(--p)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px; border-radius: 50%; background: var(--accent); border: 3px solid var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); border: 3px solid var(--panel); }
+.ts { display: none; }
+.tag.side { transform: translate(0, -50%); font-size: 10.5px; padding: 1px 5px; }
+@media (pointer: coarse) { button, .seg label { min-height: 40px; } .pose-btn { min-height: 48px; } .sw { min-height: 0; width: 34px; height: 34px; } .pose-del { min-height: 0; } }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 td { padding: 7px 0; border-bottom: 1px solid var(--line); }
 td:last-child { text-align: right; font-family: var(--f-mono); }
@@ -155,6 +164,11 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   .app { height: auto; }
   .main { grid-template-columns: 1fr; }
   .stage { height: min(62vh, 520px); }
+  /* view buttons get their own strip under the model so nothing covers the figure */
+  .stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
+  .stage canvas { grid-row: 1; grid-column: 1; }
+  .views { position: static; grid-row: 2; grid-column: 1; padding: 6px; gap: 5px; border-top: 1px solid var(--line); background: var(--panel); }
+  .views button { padding: 0 10px; }
   /* the page scrolls with a vertical swipe over the model; horizontal drag rotates, pinch zooms */
   .stage canvas { touch-action: pan-y; }
   .panel { overflow: visible; }
@@ -163,28 +177,40 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 /* Phone turned sideways: panel with poses on the left, 3D model on the right, both full height */
 @media (orientation: landscape) and (max-height: 560px) {
   html, body { height: 100%; }
-  .app { height: 100%; padding-block: 8px; gap: 8px; }
+  .app { height: 100%; padding-block: 4px; padding-inline: 6px; gap: 4px; }
   header { display: none; }
-  .main { grid-template-columns: minmax(250px, 42%) minmax(0, 1fr); gap: 8px; }
-  .panel { order: 1; overflow: hidden; }
-  .stage { order: 2; height: auto; }
-  .pane { overflow-y: auto; min-height: 0; flex: 1; padding: 12px; gap: 12px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .main { grid-template-columns: minmax(230px, 44%) minmax(0, 1fr); gap: 6px; }
+  .panel { order: 1; overflow: hidden; border-radius: 8px; }
+  .tabs button { min-height: 0; }
+  .tl { display: none; } .ts { display: inline; }
+  .label { font-size: 10px; }
+  .field { gap: 2px; }
+  .pane .note { font-size: 11.5px; }
+  /* stage: 3D view on the left, its controls in their own column so nothing covers the figure */
+  .stage { order: 2; height: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); border-radius: 8px; }
+  .stage canvas { grid-column: 1; grid-row: 1; }
+  .views { position: static; grid-column: 2; grid-row: 1; flex-direction: column; flex-wrap: nowrap; justify-content: center; gap: 5px; padding: 5px; border-left: 1px solid var(--line); background: var(--panel); }
+  .views .spacer { display: none; }
+  .views button { min-height: 34px; padding: 0 9px; font-size: 11.5px; width: 100%; }
+  .dial { display: none; }
+  .hud-tl { top: 5px; left: 7px; display: flex; gap: 6px; align-items: baseline; }
+  .hud-tl span:first-child { display: none; }
+  .hud-tl b { font-size: 0.95rem; }
+  .hud-tl span { font-size: 10.5px; }
+  .pane { overflow-y: auto; min-height: 0; flex: 1; padding: 10px; gap: 10px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .stage canvas { touch-action: none; }
-  .tabs button { padding: 9px 4px; font-size: 11px; }
+  .tabs button { padding: 9px 2px; font-size: 11.5px; }
   .posegrid { height: auto; max-height: none; overflow: visible; }
-  .hud-tl b { font-size: 1.2rem; }
-  .dial { width: 56px; height: 56px; }
-  .views button { padding: 6px 8px; }
 }
 /* Finger scroll slider for phones */
-.srail { position: fixed; z-index: 50; width: 26px; border-radius: 13px; background: var(--panel); border: 1px solid var(--line); touch-action: none; box-sizing: border-box; }
+.srail { position: fixed; z-index: 50; width: 24px; border-radius: 13px; background: var(--panel); border: 1px solid var(--line); touch-action: none; box-sizing: border-box; }
 .srail.at-right { left: auto !important; right: max(6px, env(safe-area-inset-right, 0px)); }
 .sthumb { position: absolute; left: 3px; right: 3px; min-height: 44px; border-radius: 10px; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
 .sthumb::before, .sthumb::after { content: ""; position: absolute; left: 50%; width: 8px; height: 2px; margin-left: -4px; background: var(--on-accent); border-radius: 1px; top: calc(50% - 4px); }
 .sthumb::after { top: calc(50% + 2px); }
 .srail.drag .sthumb { filter: brightness(1.08); }
 @media (max-width: 860px), (pointer: coarse) { .app { padding-right: calc(36px + env(safe-area-inset-right, 0px)); } }
-@media (orientation: landscape) and (max-height: 560px) { .app { padding-right: 16px; } .main { grid-template-columns: minmax(250px, 42%) minmax(0, 1fr); column-gap: 38px; } }
+@media (orientation: landscape) and (max-height: 560px) { .app { padding-right: 6px; } .main { column-gap: 34px; } }
 @media (prefers-reduced-motion: reduce) { .stages li.run::before { animation: none; } }
 </style>
 
@@ -218,8 +244,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-tab="body">Тело</button>
         <button role="tab" aria-selected="false" data-tab="pose">Позы</button>
-        <button role="tab" aria-selected="false" data-tab="scan">Фото → 3D</button>
-        <button role="tab" aria-selected="false" data-tab="avatar">Аватар ИЛ</button>
+        <button role="tab" aria-selected="false" data-tab="scan"><span class="tl">Фото → 3D</span><span class="ts">Фото</span></button>
+        <button role="tab" aria-selected="false" data-tab="avatar"><span class="tl">Аватар ИЛ</span><span class="ts">Аватар</span></button>
         <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
       </div>
 
@@ -429,7 +455,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   }
   $$('input[name=preset]').forEach(r => r.addEventListener('change', () => { Object.assign(P, PRESETS[r.value]); syncUI(); rebuild(); }));
   $$('input[name=mode]').forEach(r => r.addEventListener('change', () => { mode = r.value; applyMode(); }));
-  $('#ringsChk').addEventListener('change', e => { showRings = e.target.checked; ringMeshes.forEach(m => m.visible = showRings); });
+  $('#ringsChk').addEventListener('change', e => { showRings = e.target.checked; ringMeshes.forEach(m => m.visible = showRings); resize(); });
 
   /* ---------- Tabs ---------- */
   $$('.tabs button').forEach(b => b.addEventListener('click', () => {
@@ -534,7 +560,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
       pts.push(new THREE.Vector3(Math.cos(a) * r * SX * 1.035, yAbs - yParent, Math.sin(a) * r * SZ * 1.035));
     }
     const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 120, 0.0038, 6, true), ringMat);
-    m.userData = { label: `${name} ${cm} см`, y: yAbs - yParent, r: r * SX * 1.05 };
+    m.userData = { label: `${name} ${cm}`, y: yAbs - yParent, r: r * SX * 1.05 };
     m.visible = showRings;
     parent.add(m); ringMeshes.push(m);
   }
@@ -917,17 +943,28 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   }
   const tmp = new THREE.Vector3(), camRight = new THREE.Vector3();
   function updateTags() {
-    const w = stage.clientWidth, hgt = stage.clientHeight;
+    const w = cv.clientWidth, hgt = cv.clientHeight, side = compactStage();
     camRight.set(Math.cos(az), 0, -Math.sin(az));
+    const placed = [];
     ringMeshes.forEach(r => {
       const el = r.userData.el; if (!el) return;
       el.hidden = !showRings || scanning;
       tmp.set(0, r.userData.y, 0); r.parent.localToWorld(tmp);
-      tmp.addScaledVector(camRight, r.userData.r).project(camera);
-      el.style.left = ((tmp.x + 1) / 2 * w) + 'px';
-      el.style.top = ((1 - tmp.y) / 2 * hgt) + 'px';
+      if (!side) tmp.addScaledVector(camRight, r.userData.r);
+      tmp.project(camera);
+      placed.push({ el, y: (1 - tmp.y) / 2 * hgt, x: (tmp.x + 1) / 2 * w });
     });
+    if (side) {
+      // small screen: a column of labels on the free left side, never over the figure
+      placed.sort((a, b) => a.y - b.y);
+      let last = -Infinity;
+      placed.forEach(p => { p.y = Math.max(p.y, last + 22); last = p.y; p.el.style.left = '6px'; p.el.style.top = p.y + 'px'; p.el.classList.add('side'); });
+    } else placed.forEach(p => { p.el.style.left = p.x + 'px'; p.el.style.top = p.y + 'px'; p.el.classList.remove('side'); });
   }
+
+  // the sideways-phone stage: buttons in their own column, labels in a column on the left
+  const compactQ = matchMedia('(orientation: landscape) and (max-height: 560px)');
+  const compactStage = () => compactQ.matches || stage.clientWidth < 420;
 
   /* ---------- Orbit camera (custom, touch-friendly) ---------- */
   let az = 0.55, elv = 0.1, dist = 4.4, spin = !reduceMotion, animTo = null;
@@ -1781,7 +1818,8 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     const top = isDoc ? 8 : railTarget.getBoundingClientRect().top;
     const bottom = isDoc ? innerHeight - 8 : $('.panel').getBoundingClientRect().bottom;
     rail.classList.toggle('at-right', isDoc);
-    Object.assign(rail.style, { top: top + 'px', height: Math.max(80, bottom - top) + 'px', left: isDoc ? '' : ($('.panel').getBoundingClientRect().right + 6) + 'px' });
+    const gapL = isDoc ? 0 : $('.panel').getBoundingClientRect().right + (($('.stage').getBoundingClientRect().left - $('.panel').getBoundingClientRect().right) - 24) / 2;
+    Object.assign(rail.style, { top: top + 'px', height: Math.max(80, bottom - top) + 'px', left: isDoc ? '' : gapL + 'px' });
     const railH = Math.max(80, bottom - top), view = railTarget.clientHeight, full = railTarget.scrollHeight;
     const th = Math.max(44, railH * view / full), maxScroll = full - view;
     const frac = maxScroll > 0 ? railTarget.scrollTop / maxScroll : 0;
@@ -1816,12 +1854,19 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 
   /* ---------- Loop ---------- */
   function resize() {
-    const w = stage.clientWidth, h = stage.clientHeight;
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    const w = Math.max(1, cv.clientWidth), h = Math.max(1, cv.clientHeight);
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    // on a small stage shift the figure right so the label column on the left stays clear of it
+    if (compactStage() && showRings) camera.setViewOffset(w, h, -Math.min(46, w * 0.14), 0, w, h); else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
   }
   new ResizeObserver(resize).observe(stage);
+  compactQ.addEventListener && compactQ.addEventListener('change', resize);
 
-  let last = performance.now();
+  let last = performance.now(), frameNo = 0;
+  // filled part of every slider track (also after values change in code)
+  function paintRanges() { $$('input[type=range]').forEach(r => { const p = (r.value - r.min) / ((r.max - r.min) || 1) * 100; r.style.setProperty('--p', p + '%'); }); }
+  document.addEventListener('input', e => { if (e.target.type === 'range') paintRanges(); });
   function frame(t) {
     const dt = Math.min(0.05, (t - last) / 1000); last = t;
     tweenPose(dt);
@@ -1836,6 +1881,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     $('#viewName').textContent = VIEWS.reduce((b, v) => Math.abs(v[0] - deg) < Math.abs(b[0] - deg) ? v : b)[1];
     $('#dialNeedle').setAttribute('transform', `rotate(${deg} 40 40)`);
     updateTags();
+    if ((++frameNo & 15) === 0) paintRanges();
     requestAnimationFrame(frame);
   }
 
