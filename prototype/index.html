@@ -127,6 +127,21 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
 .chips button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .divider { height: 1px; background: var(--line); }
 .sub-lib { display: grid; gap: 12px; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 12.5px; }
+.small-select { flex: 0 0 auto; width: auto; }
+.npreview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.npreview figure { margin: 0; display: grid; gap: 3px; }
+.npreview img { width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); background: #000; }
+.npreview figcaption { font-size: 10.5px; color: var(--muted); text-align: center; }
+.vprog { display: grid; gap: 4px; }
+.vbar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.vbar div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+#vList td small { color: var(--muted); }
+.vstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.vstat { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: grid; gap: 2px; }
+.vstat small { color: var(--muted); font-size: 10.5px; }
+.vstat b { font-family: var(--f-mono); font-size: 12.5px; font-weight: 500; }
+.vstat.ok { border-left: 3px solid var(--ok); } .vstat.warn { border-left: 3px solid var(--accent); }
 .slots { display: grid; gap: 6px; }
 .slot { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 5px; border: 1px solid var(--line); border-radius: 8px; }
 .slot.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -236,7 +251,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 <div class="app">
   <header>
     <h1>Силуэт <span>360</span></h1>
-    <div class="sub">Прототип: модель тела 360°, позы, 3D по фото, аватар и искусственная личность для соцсетей</div>
+    <div class="sub">Прототип: модель тела 360°, позы, анимации, лицо, 3D по фото и видео, аватар, нейро-изображение и голос</div>
   </header>
 
   <div class="main">
@@ -269,7 +284,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <button role="tab" aria-selected="false" data-tab="face">Лицо</button>
         <button role="tab" aria-selected="false" data-tab="scan"><span class="tl">Фото → 3D</span><span class="ts">Фото</span></button>
         <button role="tab" aria-selected="false" data-tab="avatar"><span class="tl">Аватар ИЛ</span><span class="ts">Аватар</span></button>
-        <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
+        <button role="tab" aria-selected="false" data-tab="voice">Голос</button>
       </div>
 
       <div class="pane" data-pane="body">
@@ -293,6 +308,15 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <div class="seg">
           <input type="checkbox" id="ringsChk"><label for="ringsChk">Показывать обхваты</label>
         </div>
+        <div class="divider"></div>
+        <span class="label">Снятые мерки</span>
+        <table><tbody id="measTable"></tbody></table>
+        <p class="note">Длины считаются по пропорциям от роста; в продукте их даёт подогнанная модель SMPL-X по геодезическим линиям на поверхности.</p>
+        <span class="label">Экспорт</span>
+        <div class="chips">
+          <button disabled>GLB</button><button disabled>USDZ</button><button disabled>OBJ</button><button disabled>JSON мерок</button>
+        </div>
+        <p class="note">В прототипе экспорт отключён.</p>
       </div>
 
       <div class="pane" data-pane="pose" hidden>
@@ -376,6 +400,21 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <p class="note" id="avMsg" aria-live="polite"></p>
         <div class="divider"></div>
         <div class="field">
+          <span class="label">Изображение в нейросети</span>
+          <p class="note">Модель задаёт позу и объём, нейросеть — фотореализм и стиль. Прототип готовит референс, карту глубины и скелет позы (для ControlNet) и промпт.</p>
+        </div>
+        <div class="field"><label for="nIdea" class="label">Что изобразить</label><textarea id="nIdea" rows="2" maxlength="300" placeholder="Например: на набережной вечером, в пальто, кинематографично"></textarea></div>
+        <div class="field"><span class="label">Стиль</span><div class="chips" id="nStyle"></div></div>
+        <button class="primary" id="nMake">Подготовить для нейросети</button>
+        <div id="nOut" class="field" hidden>
+          <div class="npreview" id="nPreview"></div>
+          <label for="nPrompt" class="label">Промпт</label><textarea id="nPrompt" rows="4"></textarea>
+          <label for="nNeg" class="label">Негативный промпт</label><textarea id="nNeg" rows="2"></textarea>
+          <div class="chips"><button id="nClaude">Улучшить промпт с Claude</button><button id="nTemplate">По шаблону</button><button id="nCopy">Копировать</button><button id="nZip">Скачать пакет (.zip)</button></div>
+        </div>
+        <p class="note" id="nMsg" aria-live="polite"></p>
+        <div class="divider"></div>
+        <div class="field">
           <span class="label">Искусственная личность (ИЛ)</span>
           <p class="note">Характер для аватара: Claude напишет био под каждую сеть, приветствие и подписи к стикерам. С ИЛ можно поговорить ниже.</p>
         </div>
@@ -392,19 +431,38 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <div id="ilChat" class="field" hidden>
           <span class="label">Поговорить с ИЛ</span>
           <div class="chatlog" id="chatLog"></div>
+          <div class="seg"><input type="checkbox" id="ilSpeak"><label for="ilSpeak">Озвучивать ответы голосом модели</label></div>
           <form id="chatForm" class="rowc"><input type="text" id="chatInput" placeholder="Напишите сообщение" maxlength="500" autocomplete="off"><button class="primary" type="submit">Отправить</button></form>
         </div>
       </div>
 
-      <div class="pane" data-pane="meas" hidden>
-        <span class="label">Снятые мерки</span>
-        <table><tbody id="measTable"></tbody></table>
-        <p class="note">Длины считаются по пропорциям от роста; в продукте их даёт подогнанная модель SMPL-X по геодезическим линиям на поверхности.</p>
-        <span class="label">Экспорт</span>
-        <div class="chips">
-          <button disabled>GLB</button><button disabled>USDZ</button><button disabled>OBJ</button><button disabled>JSON мерок</button>
+      <div class="pane" data-pane="voice" hidden>
+        <div class="field">
+          <span class="label">Голос модели</span>
+          <p class="note">Загрузите 30 минут своей речи: обычный разговор или чтение вслух, один голос, тихая комната. Прототип проверит записи и соберёт профиль голоса. Клон голоса обучается нейросетью на сервере по этим записям.</p>
         </div>
-        <p class="note">В прототипе экспорт отключён.</p>
+        <div class="seg"><input type="checkbox" id="vConsent"><label for="vConsent">Это мой голос, я согласен на его цифровую копию</label></div>
+        <div class="chips"><button class="primary" id="vPick" disabled>Загрузить аудио</button><button id="vRec" disabled>Записать на телефон</button></div>
+        <input type="file" id="vFile" accept="audio/*" multiple hidden>
+        <input type="file" id="vFileRec" accept="audio/*" capture="user" hidden>
+        <div class="vprog"><div class="vbar"><div id="vBar"></div></div><b id="vTotal">0:00 из 30:00</b></div>
+        <table><tbody id="vList"></tbody></table>
+        <div class="vstats" id="vStats" hidden></div>
+        <ul class="stages" id="vChecks"></ul>
+        <p class="note" id="vMsg" aria-live="polite"></p>
+        <div class="divider"></div>
+        <div class="field" id="vSpeakBox">
+          <span class="label">Предпросмотр: модель говорит</span>
+          <p class="note">Пока клон не обучен, модель говорит голосом браузера, подобранным под высоту и темп вашей речи. Губы двигаются в такт.</p>
+          <select id="vVoice" aria-label="Голос"></select>
+          <div class="field"><div class="row"><label for="vPitch">Высота</label></div><input type="range" id="vPitch" min="0.5" max="1.6" step="0.01" value="1"></div>
+          <div class="field"><div class="row"><label for="vRate">Темп</label></div><input type="range" id="vRate" min="0.6" max="1.5" step="0.01" value="1"></div>
+          <textarea id="vText" rows="2" maxlength="300" placeholder="Что сказать. Например: Привет! Я твой цифровой двойник."></textarea>
+          <div class="chips"><button class="primary" id="vSay">Сказать</button><button id="vStop">Стоп</button></div>
+        </div>
+        <p class="note" id="vNoTts" hidden>В этом браузере нет синтеза речи — предпросмотр голоса недоступен. Откройте прототип в Chrome или Safari.</p>
+        <button id="vProfile" disabled>Скачать профиль голоса (.json)</button>
+        <p class="note">Голос — биометрические данные. Загружайте только свой голос. Записи остаются в этом браузере.</p>
       </div>
 
       <div class="pane" data-pane="face" hidden>
@@ -434,7 +492,24 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
           <svg viewBox="0 0 100 100" id="frameRing" aria-hidden="true"></svg>
           <div><div class="big" id="frameOut">0 фото</div><div class="note" id="frameNote">нужно 30–60, по кругу</div></div>
         </div>
-        <p class="note">Как снимать: человек стоит в A-позе на однотонном фоне, вы обходите его по кругу на одном расстоянии, телефон на уровне пояса. Первое фото — анфас, в кадре всё тело от макушки до стоп. Порядок фото берётся из имён файлов.</p>
+        <div class="field">
+          <span class="label">Как снимать</span>
+          <ol class="steps">
+            <li>Человек стоит в A-позе в центре, фон однотонный.</li>
+            <li>Телефон вертикально, на уровне груди, в 2–2,5 м от человека.</li>
+            <li>Начните спереди и медленно обойдите один полный круг за 30–40 секунд. В кадре всё тело от макушки до стоп.</li>
+            <li>Снимите видео или 30–60 фото и загрузите ниже. Порядок фото берётся из имён файлов.</li>
+          </ol>
+          <button id="guideBtn">Показать, как снимать</button>
+        </div>
+        <div class="field">
+          <span class="label">Видео</span>
+          <div class="chips"><button class="primary" id="videoShoot">Снять видео</button><button id="videoPick">Загрузить видео</button></div>
+          <div class="row"><label for="videoFrames">Кадров из видео</label>
+            <select id="videoFrames" class="small-select"><option>36</option><option selected>48</option><option>60</option><option>72</option></select></div>
+          <input type="file" id="videoCam" accept="video/*" capture="environment" hidden>
+          <input type="file" id="videoFile" accept="video/*" hidden>
+        </div>
         <div class="field">
           <div class="row"><label for="photoH">Рост человека, см</label></div>
           <input type="number" id="photoH" min="120" max="220" value="178" inputmode="numeric">
@@ -452,7 +527,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
           </div>
         </div>
         <div class="chips">
-          <button class="primary" id="pickPhotos">Загрузить фото</button>
+          <button id="pickPhotos">Загрузить фото</button>
           <button id="demoPhotos">Демо: 50 фото с модели</button>
         </div>
         <input type="file" id="photoFiles" accept="image/*" multiple hidden>
@@ -530,6 +605,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     poseTabOpen = b.dataset.tab === 'pose'; applyMode();
     avOpen = b.dataset.tab === 'avatar'; if (avOpen) refreshAvatar();
     setFaceView(b.dataset.tab === 'face');
+    if (b.dataset.tab !== 'scan') showGuide(false);
   }));
 
   /* ---------- Three.js scene ---------- */
@@ -1978,6 +2054,115 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     photoMsg('Демо готово: это результат по 50 снимкам. Загрузите свои фото, чтобы проверить на реальном человеке.');
   });
 
+  /* ---------- Video → 3D: frames from one walk around the person ---------- */
+  const once = (el, ev) => new Promise((res, rej) => { const ok = () => { el.removeEventListener('error', bad); res(); }, bad = () => { el.removeEventListener(ev, ok); rej(new Error('video')); }; el.addEventListener(ev, ok, { once: true }); el.addEventListener('error', bad, { once: true }); });
+  async function videoToPhotos(file, n) {
+    const url = URL.createObjectURL(file), v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+    try {
+      await once(v, 'loadedmetadata');
+      try { await v.play(); v.pause(); } catch (e) { /* some browsers need a play() before seeking; fine if refused */ }
+      if (!isFinite(v.duration)) { v.currentTime = 1e7; await once(v, 'seeked'); }
+      const dur = v.duration, out = [];
+      if (!dur || !v.videoWidth) throw new Error('video');
+      for (let i = 0; i < n; i++) {
+        v.currentTime = Math.min(dur - 0.05, (i + 0.5) / n * dur);
+        await once(v, 'seeked');
+        out.push(toCanvas(v, v.videoWidth, v.videoHeight));
+        stage_(0, 'run', `кадр ${i + 1}/${n}`);
+        if (i % 4 === 3) await tick();
+      }
+      return { frames: out, dur };
+    } finally { URL.revokeObjectURL(url); v.removeAttribute('src'); v.load(); }
+  }
+  const takeVideo = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f || busy) return;
+    busy = true; truth = null; photos = []; resetStages(); clearResult(); showGuide(false);
+    stage_(0, 'run', 'видео');
+    try {
+      const { frames, dur } = await videoToPhotos(f, +$('#videoFrames').value);
+      photos = frames;
+      stage_(0, 'done', `${frames.length} кадров из ${Math.round(dur)} с`);
+      await segmentAll();
+      photoMsg(dur < 15 ? 'Видео короткое: за один круг лучше идти 30–40 секунд. Проверьте силуэты и нажмите «Построить 3D».' : 'Кадры из видео готовы. Проверьте силуэты на миниатюрах и нажмите «Построить 3D».');
+    } catch (err) {
+      stage_(0, '');
+      photoMsg('Не получилось прочитать видео в этом браузере. Попробуйте MP4 (H.264) или снимите заново кнопкой «Снять видео».');
+    }
+    busy = false;
+  };
+  $('#videoShoot').addEventListener('click', () => $('#videoCam').click());
+  $('#videoPick').addEventListener('click', () => $('#videoFile').click());
+  $('#videoCam').addEventListener('change', takeVideo);
+  $('#videoFile').addEventListener('change', takeVideo);
+
+  /* The capture guide: a phone circles the model on a marked path, at chest height, facing the person */
+  let guide = null, guideOn = false, guideCam = null;
+  function buildGuide() {
+    const g = new THREE.Group(), acc = new THREE.Color(css('--accent')), ink = new THREE.Color(css('--ink'));
+    const R = 2.3;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(R - 0.015, R + 0.015, 128), new THREE.MeshBasicMaterial({ color: ink, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.004; g.add(ring);
+    // progress: dots light up behind the phone
+    const dotGeo = new THREE.SphereGeometry(0.035, 10, 6), dotMat = new THREE.MeshBasicMaterial({ color: acc }), prog = [];
+    for (let i = 0; i < 72; i++) { const d = new THREE.Mesh(dotGeo, dotMat); d.position.y = 0.02; g.add(d); prog.push(d); }
+    // arrows along the path show the walking direction
+    const arrows = [];
+    for (let i = 0; i < 8; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 12), new THREE.MeshBasicMaterial({ color: acc })); c.position.y = 0.03; g.add(c); arrows.push(c); }
+    // the phone: body, screen, small camera bump; held upright at chest height
+    const phone = new THREE.Group();
+    phone.add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.01), new THREE.MeshStandardMaterial({ color: '#22262c', roughness: 0.4 })));
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.145), new THREE.MeshBasicMaterial({ color: acc })); scr.position.z = -0.0055; scr.rotation.y = Math.PI; phone.add(scr);
+    phone.scale.setScalar(2.2); g.add(phone);
+    // view lines from the phone to the top of the head and the feet
+    const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: acc }));
+    g.add(lines);
+    const height = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1, 8), new THREE.MeshBasicMaterial({ color: acc })); g.add(height);
+    g.userData = { R, prog, arrows, phone, lines, height, t: 0 };
+    return g;
+  }
+  function showGuide(v) {
+    if (v === guideOn) return;
+    guideOn = v;
+    $('#guideBtn').classList.toggle('on', v); $('#guideBtn').textContent = v ? 'Скрыть подсказку' : 'Показать, как снимать';
+    if (v) {
+      if (!guide) { guide = buildGuide(); scene.add(guide); }
+      guide.visible = true; guideCam = { dist, elv };
+      dist = 8.5; elv = 0.6; setSpin(false);
+      stopAnim();
+    } else {
+      if (guide) guide.visible = false;
+      if (guideCam) { dist = guideCam.dist; elv = guideCam.elv; guideCam = null; }
+    }
+  }
+  $('#guideBtn').addEventListener('click', () => showGuide(!guideOn));
+  function stepGuide(dt) {
+    if (!guideOn || !guide) return;
+    const u = guide.userData, dirS = dirSign(), H = P.height / 100;
+    u.t = (u.t + dt / 9) % 1;                             // one circle in ~9 s of animation
+    const a = dirS * u.t * Math.PI * 2;                   // starts in front of the person (azimuth 0)
+    const hy = Math.min(1.35, H * 0.62);
+    u.phone.position.set(Math.sin(a) * u.R, hy, Math.cos(a) * u.R);
+    u.phone.lookAt(0, hy, 0);
+    u.height.position.set(u.phone.position.x, hy / 2, u.phone.position.z); u.height.scale.y = hy;
+    const p = u.lines.geometry.attributes.position;
+    p.setXYZ(0, u.phone.position.x, hy, u.phone.position.z); p.setXYZ(1, 0, H + 0.05, 0);
+    p.setXYZ(2, u.phone.position.x, hy, u.phone.position.z); p.setXYZ(3, 0, 0, 0);
+    p.needsUpdate = true;
+    u.prog.forEach((d, i) => {
+      const b = dirS * (i / u.prog.length) * Math.PI * 2;
+      d.position.x = Math.sin(b) * u.R; d.position.z = Math.cos(b) * u.R;
+      d.visible = i / u.prog.length <= u.t;
+    });
+    const up = new THREE.Vector3(0, 1, 0);
+    u.arrows.forEach((c, i) => {
+      const b = (i + 0.5) / u.arrows.length * Math.PI * 2;
+      c.position.set(Math.sin(b) * u.R, 0.05, Math.cos(b) * u.R);
+      c.quaternion.setFromUnitVectors(up, new THREE.Vector3(Math.cos(b) * dirS, 0, -Math.sin(b) * dirS));
+    });
+  }
+
   /* ---------- Avatar studio: renders for every network + stickers ---------- */
   const PALETTE = {
     skin: ['#f1c7a8', '#d9a07c', '#b07650', '#8a5637', '#5e3a26'],
@@ -2191,16 +2376,16 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const standalone = !window.claude;
   if (!standalone && claude.use) claude.use('downloads').then(d => { downloads = d; });
   const toBlob = (c) => new Promise(res => c.toBlob(res, 'image/png'));
-  async function saveFile(filename, data) {
+  async function saveFile(filename, data, say = avMsg) {
     if (standalone) {
       const a = document.createElement('a'); a.href = URL.createObjectURL(data); a.download = filename;
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      avMsg(`Сохранено: ${filename}`); return true;
+      say(`Сохранено: ${filename}`); return true;
     }
-    if (!downloads) { avMsg('В этом просмотре сохранение файлов недоступно. Откройте прототип из репозитория или в приложении Claude.'); return false; }
-    try { await downloads.save({ filename, data }); avMsg(`Сохранено: ${filename}`); return true; }
+    if (!downloads) { say('В этом просмотре сохранение файлов недоступно. Откройте прототип из репозитория или в приложении Claude.'); return false; }
+    try { await downloads.save({ filename, data }); say(`Сохранено: ${filename}`); return true; }
     catch (e) {
-      avMsg(e.code === 'declined' ? 'Сохранение отменено.' : e.code === 'rate_limited' ? 'Подождите пару секунд и попробуйте снова.' : 'Не удалось сохранить файл в этом просмотре.');
+      say(e.code === 'declined' ? 'Сохранение отменено.' : e.code === 'rate_limited' ? 'Подождите пару секунд и попробуйте снова.' : 'Не удалось сохранить файл в этом просмотре.');
       return false;
     }
   }
@@ -2339,12 +2524,346 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         cache: false, modelTier: 'quick', onText: ({ text: t }) => { bubble.textContent = t; log.scrollTop = log.scrollHeight; },
       });
       chat.push({ role: 'assistant', content: ans });
+      if ($('#ilSpeak').checked) speak(ans);
     } catch (err) {
       chat.pop();
       bubble.textContent = err.code === 'not_granted' ? 'Доступ к Claude не разрешён.' : err.code === 'rate_limited' ? 'Слишком часто — подождите немного.' : 'Не получилось ответить, попробуйте ещё раз.';
     }
   });
   if (persona) renderPersona();
+
+  /* ---------- Neural image: reference render, depth map, OpenPose skeleton and a prompt for an image model ---------- */
+  const COLOR_EN = {
+    skin: ['fair skin', 'light skin', 'medium skin', 'tan skin', 'dark skin'],
+    hair: ['dark brown hair', 'brown hair', 'blond hair', 'red hair', 'grey hair'],
+    top: ['blue top', 'red top', 'green top', 'yellow top', 'black top', 'white top'],
+    bottom: ['dark grey trousers', 'grey-blue trousers', 'brown trousers', 'black trousers', 'beige trousers'],
+  };
+  const EMO_EN = { neutral: 'neutral expression', smile: 'smiling', laugh: 'laughing', sad: 'sad expression', angry: 'angry expression', surprise: 'surprised expression', fear: 'scared expression', disgust: 'disgusted expression', wink: 'winking', calm: 'calm, eyes closed' };
+  const NSTYLES = [
+    ['photo', 'Фото', 'photorealistic photo, 85mm lens, natural light, high detail skin'],
+    ['cinema', 'Кино', 'cinematic film still, dramatic lighting, shallow depth of field, color graded'],
+    ['anime', 'Аниме', 'anime illustration, clean line art, cel shading, vibrant colors'],
+    ['comic', 'Комикс', 'comic book art, bold ink outlines, halftone shading'],
+    ['oil', 'Масло', 'oil painting, visible brush strokes, classical portrait style'],
+    ['cyber', 'Киберпанк', 'cyberpunk, neon city lights, rain, futuristic outfit'],
+    ['pixar', '3D-мультфильм', '3D animated movie character, soft global illumination, stylized proportions'],
+  ];
+  let nstyle = 'photo', neuroPack = null;
+  $('#nStyle').innerHTML = NSTYLES.map(([k, n]) => `<button data-k="${k}" class="${k === nstyle ? 'on' : ''}">${n}</button>`).join('');
+  $$('#nStyle button').forEach(b => b.addEventListener('click', () => { nstyle = b.dataset.k; $$('#nStyle button').forEach(x => x.classList.toggle('on', x === b)); }));
+  const nMsg = (t) => { $('#nMsg').textContent = t; };
+
+  // one camera for all three images so they line up pixel for pixel
+  function neuroCamera(subject, W, H) {
+    subject.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(subject), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
+    const fov = 30, a = AV.angle * Math.PI / 180;
+    const halfH = Math.max(sz.y * 0.56, Math.max(sz.x, sz.z) * 0.56 * H / W), dist = halfH / Math.tan(fov * Math.PI / 360);
+    const cam = new THREE.PerspectiveCamera(fov, W / H, 0.05, 50);
+    cam.position.set(c.x + Math.sin(a) * dist, c.y + dist * 0.05, c.z + Math.cos(a) * dist); cam.lookAt(c);
+    const r = sz.length() / 2; cam.near = Math.max(0.05, dist - r * 1.1); cam.far = dist + r * 1.1; cam.updateProjectionMatrix();
+    return cam;
+  }
+  function cloneWith(matFn) {
+    const s = body.clone(true); s.visible = true;
+    s.traverse(m => { if (m.isPoints) m.visible = false; else if (m.isMesh) { if (m.material === ringMat || m.userData.part === 'decal') { m.visible = false; return; } m.material = matFn(m.userData.part || 'top'); } });
+    return s;
+  }
+  function canvasFrom(r, W, H, bg) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'); if (bg) { x.fillStyle = bg; x.fillRect(0, 0, W, H); }
+    x.drawImage(r.domElement, 0, 0, W, H); return c;
+  }
+  function renderNeuro(W, H) {
+    const r = avatarRenderer(); r.setSize(W, H, false);
+    // 1. reference render in the studio style
+    const mats = {}, ref = cloneWith(part => mats[part] || (mats[part] = materialFor(part, 'studio')));
+    const sc = new THREE.Scene(); sc.environment = envTex; sc.add(ref);
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x444450, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(1.5, 3, 2.5); sc.add(key);
+    const cam = neuroCamera(ref, W, H);
+    r.setClearColor(0x000000, 0); r.render(sc, cam);
+    const refC = canvasFrom(r, W, H, '#d9dde2');
+    Object.values(mats).forEach(m => m.dispose());
+    // 2. depth: near = white, far = black (ControlNet depth convention)
+    const dmat = new THREE.MeshDepthMaterial(), dep = cloneWith(() => dmat), sd = new THREE.Scene(); sd.add(dep);
+    r.setClearColor(0x000000, 1); r.toneMapping = THREE.NoToneMapping; r.outputEncoding = THREE.LinearEncoding;
+    r.render(sd, cam);
+    const depC = canvasFrom(r, W, H, '#000');
+    r.toneMapping = THREE.ACESFilmicToneMapping; r.outputEncoding = THREE.sRGBEncoding; dmat.dispose();
+    // 3. OpenPose (COCO-18) skeleton from the joints
+    const poseC = document.createElement('canvas'); poseC.width = W; poseC.height = H;
+    drawOpenPose(poseC.getContext('2d'), cam, W, H);
+    return { refC, depC, poseC };
+  }
+  function drawOpenPose(x, cam, W, H) {
+    const h = P.height / 100, v = (key, px = 0, py = 0, pz = 0) => J[key].localToWorld(new THREE.Vector3(px, py, pz));
+    const mid = (a, b) => a.clone().add(b).multiplyScalar(0.5);
+    const shL = v('shL'), shR = v('shR');
+    // COCO order: nose, neck, R sho, R elb, R wri, L sho, L elb, L wri, R hip, R knee, R ank, L hip, L knee, L ank, R eye, L eye, R ear, L ear
+    const pts = [v('neck', 0, 0.09 * h, 0.058 * h), mid(shL, shR), shR, v('elR'), v('elR', 0, -0.146 * h, 0), shL, v('elL'), v('elL', 0, -0.146 * h, 0),
+      v('hipR'), v('knR'), v('anR'), v('hipL'), v('knL'), v('anL'),
+      v('neck', -0.0165 * h, 0.1 * h, 0.05 * h), v('neck', 0.0165 * h, 0.1 * h, 0.05 * h), v('neck', -0.046 * h, 0.093 * h, 0), v('neck', 0.046 * h, 0.093 * h, 0)]
+      .map(p => { const q = p.project(cam); return [(q.x + 1) / 2 * W, (1 - q.y) / 2 * H]; });
+    const limbs = [[1, 2], [1, 5], [2, 3], [3, 4], [5, 6], [6, 7], [1, 8], [8, 9], [9, 10], [1, 11], [11, 12], [12, 13], [1, 0], [0, 14], [14, 16], [0, 15], [15, 17]];
+    const cols = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0], [85, 255, 0], [0, 255, 0], [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255], [85, 0, 255], [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]];
+    x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+    const sw = Math.max(3, W / 128);
+    limbs.forEach(([a, b], i) => {
+      const [x1, y1] = pts[a], [x2, y2] = pts[b], len = Math.hypot(x2 - x1, y2 - y1);
+      x.save(); x.globalAlpha = 0.6; x.fillStyle = `rgb(${cols[i].join(',')})`;
+      x.translate((x1 + x2) / 2, (y1 + y2) / 2); x.rotate(Math.atan2(y2 - y1, x2 - x1));
+      x.beginPath(); x.ellipse(0, 0, len / 2, sw, 0, 0, Math.PI * 2); x.fill(); x.restore();
+    });
+    pts.forEach(([px, py], i) => { x.fillStyle = `rgb(${cols[i].join(',')})`; x.beginPath(); x.arc(px, py, sw * 1.1, 0, Math.PI * 2); x.fill(); });
+  }
+
+  function templatePrompt() {
+    const st = NSTYLES.find(s => s[0] === nstyle)[2], idea = $('#nIdea').value.trim();
+    const build = P.chest - P.waist > 20 ? 'athletic build' : P.waist > 95 ? 'heavy build' : 'average build';
+    const pose = activeName ? `pose like "${activeName}"` : 'natural standing pose';
+    const parts = [st, `full body shot of one person, ${build}, ${P.height} cm tall`, EMO_EN[curEmo] || 'neutral expression',
+      `${COLOR_EN.skin[AV.skin]}, ${COLOR_EN.hair[AV.hair]}, wearing ${COLOR_EN.top[AV.top]} and ${COLOR_EN.bottom[AV.bottom]}`, pose, idea ? `scene: ${idea}` : 'simple studio background'];
+    return { prompt: parts.join(', '), negative: 'extra limbs, extra fingers, deformed hands, distorted face, blurry, low quality, watermark, text' };
+  }
+  function showPrompt(p) { $('#nPrompt').value = p.prompt; $('#nNeg').value = p.negative; }
+
+  $('#nMake').addEventListener('click', async () => {
+    nMsg('Рисую референс, глубину и скелет…'); await tick();
+    neuroPack = renderNeuro(768, 1024);
+    const box = $('#nPreview'); box.innerHTML = '';
+    [['Референс', neuroPack.refC], ['Глубина', neuroPack.depC], ['Поза OpenPose', neuroPack.poseC]].forEach(([n, c]) => {
+      const f = document.createElement('figure'); const im = document.createElement('img'); im.src = c.toDataURL('image/png'); im.alt = n;
+      const cap = document.createElement('figcaption'); cap.textContent = n; f.append(im, cap); box.appendChild(f);
+    });
+    if (!$('#nPrompt').value) showPrompt(templatePrompt());
+    $('#nOut').hidden = false;
+    nMsg('Готово. Скачайте пакет и загрузите картинки в нейросеть вместе с промптом.');
+  });
+  $('#nTemplate').addEventListener('click', () => showPrompt(templatePrompt()));
+  $('#nClaude').addEventListener('click', async () => {
+    if (!sample) { showPrompt(templatePrompt()); nMsg('Claude недоступен в этом просмотре — промпт собран по шаблону.'); return; }
+    const base = templatePrompt();
+    nMsg('Claude пишет промпт…');
+    try {
+      const r = await sample.json(`Ты помогаешь сгенерировать изображение человека в нейросети (Stable Diffusion XL / Flux / Midjourney) по его 3D-модели.
+Данные модели: ${base.prompt}.
+${persona ? `Характер персонажа: ${persona.tagline || ''}; ${(persona.voice || []).join('; ')}.` : ''}
+Пожелание пользователя (по-русски): «${$('#nIdea').value.trim() || 'нет'}».
+Напиши выразительный промпт на английском (до 70 слов): стиль, сцена, свет, ракурс, одежда, эмоция. Позу не описывай подробно — её задаст ControlNet.
+Верни только JSON: {"prompt": "...", "negative": "..."}`);
+      if (!r || !r.prompt) throw { code: 'bad' };
+      showPrompt({ prompt: r.prompt, negative: r.negative || base.negative }); nMsg('Промпт от Claude готов.');
+    } catch (e) { showPrompt(base); nMsg(e.code === 'not_granted' ? 'Доступ к Claude не разрешён — промпт собран по шаблону.' : 'Claude не ответил — промпт собран по шаблону.'); }
+  });
+  $('#nCopy').addEventListener('click', () => {
+    const t = $('#nPrompt').value + '\n\nNegative: ' + $('#nNeg').value;
+    try { navigator.clipboard.writeText(t).then(() => nMsg('Промпт скопирован.'), () => { $('#nPrompt').select(); nMsg('Выделил промпт — скопируйте вручную.'); }); } catch (e) { $('#nPrompt').select(); }
+  });
+  $('#nZip').addEventListener('click', async () => {
+    if (!neuroPack) return;
+    if (typeof JSZip === 'undefined') { nMsg('Архиватор не загрузился.'); return; }
+    const zip = new JSZip();
+    zip.file('reference.png', await toBlob(neuroPack.refC));
+    zip.file('depth.png', await toBlob(neuroPack.depC));
+    zip.file('openpose.png', await toBlob(neuroPack.poseC));
+    zip.file('prompt.txt', `${$('#nPrompt').value}\n\nNEGATIVE:\n${$('#nNeg').value}\n`);
+    zip.file('README.txt', [
+      'Как получить изображение', '',
+      'Stable Diffusion / ComfyUI / Automatic1111:',
+      '  1. Модель SDXL или Flux, промпт из prompt.txt.',
+      '  2. ControlNet OpenPose -> openpose.png (держит позу), ControlNet Depth -> depth.png (держит объём), сила 0.6–0.9.',
+      '  3. Для похожести лица добавьте IP-Adapter FaceID / InstantID со своим фото.',
+      'Midjourney: загрузите reference.png как картинку-референс и добавьте промпт.',
+      'Размер 768×1024, кадры совпадают пиксель в пиксель.',
+    ].join('\n'));
+    await saveFile('neuro-pack.zip', await zip.generateAsync({ type: 'blob' }), nMsg);
+  });
+
+  /* ---------- Voice: collect 30 minutes of speech, check quality, build a voice profile, let the model speak ---------- */
+  const VOICE_GOAL = 30 * 60;
+  let vFiles = [];               // { name, dur, stats? , note? }
+  const vMsg = (t) => { $('#vMsg').textContent = t; };
+  const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  $('#vConsent').addEventListener('change', e => { $('#vPick').disabled = !e.target.checked; $('#vRec').disabled = !e.target.checked; });
+  $('#vPick').addEventListener('click', () => $('#vFile').click());
+  $('#vRec').addEventListener('click', () => $('#vFileRec').click());
+
+  const mediaDuration = (file) => new Promise(res => {
+    const u = URL.createObjectURL(file), a = document.createElement('audio');
+    a.preload = 'metadata'; a.src = u;
+    a.onloadedmetadata = () => { URL.revokeObjectURL(u); res(isFinite(a.duration) ? a.duration : 0); };
+    a.onerror = () => { URL.revokeObjectURL(u); res(0); };
+  });
+  let actx = null;
+  const audioCtx = () => actx || (actx = new (window.AudioContext || window.webkitAudioContext)());
+  // decode the whole file when short; for long WAV/MP3 decode three one-minute excerpts
+  async function decodeForAnalysis(file, dur) {
+    const ctx = audioCtx();
+    if (dur && dur <= 6 * 60) return [await ctx.decodeAudioData(await file.arrayBuffer())];
+    const isWav = /wav/i.test(file.type) || /\.wav$/i.test(file.name), isMp3 = /mpeg|mp3/i.test(file.type) || /\.mp3$/i.test(file.name);
+    if (!isWav && !isMp3) return null;
+    const out = [], bytesPerSec = file.size / dur;
+    for (const at of [0.15, 0.5, 0.85]) {
+      const start = Math.floor(file.size * at), len = Math.floor(bytesPerSec * 60);
+      let blob = file.slice(start, start + len);
+      if (isWav) {
+        const head = new DataView(await file.slice(0, 44).arrayBuffer()), align = head.getUint16(32, true) || 2;
+        const body = file.slice(44 + Math.floor((start - 44) / align) * align, 44 + Math.floor((start - 44) / align) * align + Math.floor(len / align) * align);
+        const hdr = new Uint8Array(await file.slice(0, 44).arrayBuffer()), dv = new DataView(hdr.buffer);
+        dv.setUint32(4, 36 + body.size, true); dv.setUint32(40, body.size, true);
+        blob = new Blob([hdr, body]);
+      }
+      try { out.push(await ctx.decodeAudioData(await blob.arrayBuffer())); } catch (e) { /* excerpt not decodable */ }
+    }
+    return out.length ? out : null;
+  }
+  // loudness, clipping, noise floor, pitch (autocorrelation) and syllable rate
+  function analyseBuffers(bufs) {
+    const rmsAll = [], f0s = []; let clip = 0, total = 0, peaks = 0, voicedSec = 0;
+    for (const b of bufs) {
+      const sr = b.sampleRate, d = b.getChannelData(0), fr = Math.round(sr * 0.03);
+      const env = [];
+      for (let i = 0; i + fr <= d.length; i += fr) {
+        let s = 0; for (let j = i; j < i + fr; j++) { const v = d[j]; s += v * v; if (v > 0.985 || v < -0.985) clip++; }
+        total += fr; const r = Math.sqrt(s / fr); rmsAll.push(r); env.push(r);
+      }
+      const sorted = [...env].sort((a, c) => a - c), loud = sorted[Math.floor(sorted.length * 0.6)] || 0;
+      // pitch on a sample of voiced frames
+      const step = Math.max(1, Math.floor(env.length / 160)), win = Math.round(sr * 0.04), minLag = Math.round(sr / 400), maxLag = Math.round(sr / 70);
+      for (let k = 0; k < env.length; k += step) {
+        if (env[k] < loud) continue;
+        const i0 = k * fr; if (i0 + win + maxLag >= d.length) break;
+        let best = 0, bestLag = 0, e0 = 0;
+        for (let j = 0; j < win; j++) e0 += d[i0 + j] * d[i0 + j];
+        for (let lag = minLag; lag <= maxLag; lag++) {
+          let c = 0, e1 = 0;
+          for (let j = 0; j < win; j++) { c += d[i0 + j] * d[i0 + j + lag]; e1 += d[i0 + j + lag] * d[i0 + j + lag]; }
+          const n = c / Math.sqrt(e0 * e1 + 1e-9); if (n > best) { best = n; bestLag = lag; }
+        }
+        if (best > 0.6 && bestLag) f0s.push(sr / bestLag);
+      }
+      // syllable nuclei: peaks of the smoothed envelope at least 120 ms apart
+      const thr = sorted[Math.floor(sorted.length * 0.5)] || 0; let last = -10;
+      for (let k = 1; k < env.length - 1; k++) {
+        if (env[k] > thr) voicedSec += 0.03;
+        if (env[k] > thr * 1.4 && env[k] >= env[k - 1] && env[k] > env[k + 1] && k - last >= 4) { peaks++; last = k; }
+      }
+    }
+    const s = [...rmsAll].sort((a, b) => a - b), q = (p) => s[Math.min(s.length - 1, Math.floor(s.length * p))] || 1e-9;
+    f0s.sort((a, b) => a - b);
+    return {
+      loudness: 20 * Math.log10(q(0.9) + 1e-9), snr: 20 * Math.log10((q(0.9) + 1e-9) / (q(0.1) + 1e-9)), clip: total ? clip / total * 100 : 0,
+      f0: f0s.length ? f0s[f0s.length >> 1] : 0, f0lo: f0s.length ? f0s[Math.floor(f0s.length * 0.1)] : 0, f0hi: f0s.length ? f0s[Math.floor(f0s.length * 0.9)] : 0,
+      rate: voicedSec > 5 ? peaks / voicedSec : 0,
+    };
+  }
+  async function addAudio(e) {
+    const files = [...e.target.files]; e.target.value = '';
+    for (const f of files) {
+      const row = { name: f.name, dur: await mediaDuration(f) };
+      vFiles.push(row); renderVoice(); vMsg(`Разбираю «${f.name}»…`); await tick();
+      try {
+        const bufs = await decodeForAnalysis(f, row.dur);
+        if (bufs) { row.stats = analyseBuffers(bufs); if (!row.dur) row.dur = bufs.reduce((t, b) => t + b.duration, 0); }
+        else row.note = 'качество не проверено: длинный файл в этом формате — запишите частями по 3–6 минут или в WAV/MP3';
+      } catch (err) { row.note = 'не удалось прочитать звук'; }
+      renderVoice();
+    }
+    vMsg('');
+  }
+  $('#vFile').addEventListener('change', addAudio);
+  $('#vFileRec').addEventListener('change', addAudio);
+
+  function voiceSummary() {
+    const withStats = vFiles.filter(f => f.stats), w = (k) => { let s = 0, t = 0; withStats.forEach(f => { if (f.stats[k]) { s += f.stats[k] * f.dur; t += f.dur; } }); return t ? s / t : 0; };
+    return { total: vFiles.reduce((t, f) => t + (f.dur || 0), 0), checked: withStats.length, loudness: w('loudness'), snr: w('snr'), clip: w('clip'), f0: w('f0'), f0lo: Math.min(...withStats.map(f => f.stats.f0lo || 999)), f0hi: Math.max(...withStats.map(f => f.stats.f0hi || 0)), rate: w('rate') };
+  }
+  function renderVoice() {
+    const s = voiceSummary(), pct = Math.min(100, s.total / VOICE_GOAL * 100);
+    $('#vBar').style.width = pct + '%';
+    $('#vTotal').textContent = `${fmtT(s.total)} из 30:00`;
+    $('#vList').innerHTML = vFiles.map((f, i) => `<tr><td>${esc(f.name)}${f.note ? `<br><small>${esc(f.note)}</small>` : ''}</td><td>${f.dur ? fmtT(f.dur) : '—'}</td><td><button class="pose-del" data-vrm="${i}" aria-label="Убрать ${esc(f.name)}">×</button></td></tr>`).join('');
+    $$('#vList [data-vrm]').forEach(b => b.addEventListener('click', () => { vFiles.splice(+b.dataset.vrm, 1); renderVoice(); }));
+    const has = s.checked > 0;
+    $('#vStats').hidden = !has;
+    if (has) {
+      const cell = (k, v, ok) => `<div class="vstat ${ok ? 'ok' : 'warn'}"><small>${k}</small><b>${v}</b></div>`;
+      $('#vStats').innerHTML = cell('Громкость', `${s.loudness.toFixed(0)} dBFS`, s.loudness > -30 && s.loudness < -3)
+        + cell('Шум (сигнал/шум)', `${s.snr.toFixed(0)} дБ`, s.snr >= 25)
+        + cell('Искажения', `${s.clip.toFixed(2)} %`, s.clip < 0.1)
+        + cell('Высота голоса', s.f0 ? `${Math.round(s.f0)} Гц` : '—', !!s.f0)
+        + cell('Диапазон', s.f0 ? `${Math.round(s.f0lo)}–${Math.round(s.f0hi)} Гц` : '—', !!s.f0)
+        + cell('Темп', s.rate ? `${s.rate.toFixed(1)} слог/с` : '—', s.rate > 2.5 && s.rate < 7.5);
+    }
+    const checks = [
+      [s.total >= VOICE_GOAL, `Набрано 30 минут речи (${fmtT(s.total)})`],
+      [has && s.snr >= 25, 'Тихий фон без музыки и эха'],
+      [has && s.clip < 0.1, 'Без перегруза микрофона'],
+      [has && s.loudness > -30, 'Достаточная громкость'],
+    ];
+    $('#vChecks').innerHTML = checks.map(([ok, t]) => `<li class="${ok ? 'done' : ''}">${t}</li>`).join('');
+    // preview voice follows the analysed pitch and pace
+    if (has && s.f0 && !voiceTouched) {
+      const female = s.f0 > 165;
+      $('#vPitch').value = Math.max(0.5, Math.min(1.6, s.f0 / (female ? 210 : 120))).toFixed(2);
+      $('#vRate').value = s.rate ? Math.max(0.7, Math.min(1.4, s.rate / 5)).toFixed(2) : 1;
+      pickVoiceFor(female);
+    }
+    paintRanges();
+    $('#vProfile').disabled = !has;
+  }
+
+  /* Speaking with the browser's speech engine + lip movement on the 3D face */
+  let voices = [], voiceTouched = false, speaking = false, lipKick = 0, faceBeforeSpeech = null;
+  const synth = window.speechSynthesis;
+  function loadVoices() {
+    if (!synth) return;
+    voices = synth.getVoices().sort((a, b) => (b.lang.startsWith('ru') - a.lang.startsWith('ru')) || a.name.localeCompare(b.name));
+    $('#vVoice').innerHTML = voices.length ? voices.map((v, i) => `<option value="${i}">${esc(v.name)} · ${v.lang}</option>`).join('') : '<option>Голоса не найдены</option>';
+  }
+  if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+  else { $('#vSpeakBox').hidden = true; $('#vNoTts').hidden = false; }
+  function pickVoiceFor(female) {
+    const ru = voices.map((v, i) => [v, i]).filter(([v]) => v.lang.startsWith('ru'));
+    const hint = female ? /(female|жен|milena|irina|alena|anna|katya|svetlana|google русский)/i : /(male|муж|yuri|pavel|dmitri|maxim)/i;
+    const m = ru.find(([v]) => hint.test(v.name)) || ru[0];
+    if (m) $('#vVoice').value = m[1];
+  }
+  ['vPitch', 'vRate', 'vVoice'].forEach(id => $('#' + id).addEventListener('input', () => { voiceTouched = true; }));
+  function speak(text) {
+    if (!synth || !text) return;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = voices[+$('#vVoice').value]; if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'ru-RU';
+    u.pitch = +$('#vPitch').value; u.rate = +$('#vRate').value;
+    u.onstart = () => { speaking = true; faceBeforeSpeech = { ...faceNow }; };
+    u.onboundary = () => { lipKick = 1; };
+    u.onend = u.onerror = () => { speaking = false; if (faceBeforeSpeech) { faceNow.open = faceBeforeSpeech.open; applyFace(faceNow); } };
+    synth.speak(u);
+  }
+  // called every frame: the mouth opens and closes while the model talks
+  function stepLips(dt, t) {
+    if (!speaking || !FACE) return;
+    lipKick = Math.max(0, lipKick - dt * 3);
+    faceNow.open = 0.08 + Math.abs(Math.sin(t * 0.013)) * (0.25 + 0.35 * lipKick);
+    applyFace(faceNow);
+  }
+  $('#vSay').addEventListener('click', () => speak($('#vText').value.trim() || 'Привет! Это мой голос.'));
+  $('#vStop').addEventListener('click', () => synth && synth.cancel());
+  $('#vProfile').addEventListener('click', async () => {
+    const s = voiceSummary(), v = voices[+$('#vVoice').value];
+    const profile = {
+      created: new Date().toISOString(), consent: true, files: vFiles.map(f => ({ name: f.name, seconds: Math.round(f.dur || 0) })),
+      total_minutes: +(s.total / 60).toFixed(1), loudness_dbfs: +s.loudness.toFixed(1), snr_db: +s.snr.toFixed(1), clipping_pct: +s.clip.toFixed(3),
+      pitch_hz: Math.round(s.f0), pitch_range_hz: [Math.round(s.f0lo), Math.round(s.f0hi)], syllables_per_sec: +s.rate.toFixed(2),
+      preview: { voice: v ? v.name : null, pitch: +$('#vPitch').value, rate: +$('#vRate').value },
+      next_step: 'Обучение клона голоса на сервере (например XTTS v2 или F5-TTS) по этим записям; расшифровка — Whisper.',
+    };
+    await saveFile('voice-profile.json', new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }), vMsg);
+  });
+  renderVoice();
 
   /* ---------- Measurements ---------- */
   function renderMeasures() {
@@ -2436,6 +2955,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     const dt = Math.min(0.05, (t - last) / 1000); last = t;
     if (anim) stepAnim(dt); else tweenPose(dt);
     tweenFace(dt);
+    stepGuide(dt); stepLips(dt, t);
     target.y += (targetY - target.y) * Math.min(1, dt * 4);
     if (animTo !== null) { az += (animTo - az) * Math.min(1, dt * 7); if (Math.abs(animTo - az) < 0.002) { az = animTo; animTo = null; } }
     else if (spin && ptrs.size === 0) az += dt * 0.35;
