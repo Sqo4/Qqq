@@ -127,6 +127,18 @@ input[type=search]:focus-visible, input[type=text]:focus-visible, textarea:focus
 .chips button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .divider { height: 1px; background: var(--line); }
 .sub-lib { display: grid; gap: 12px; }
+.slots { display: grid; gap: 6px; }
+.slot { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 5px; border: 1px solid var(--line); border-radius: 8px; }
+.slot.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.slot-pic { width: 52px; height: 52px; min-height: 0; padding: 0; overflow: hidden; display: grid; place-items: center; border-style: dashed; }
+.slot-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.slot-pic span { font-size: 10.5px; color: var(--muted); }
+.slot-body { display: grid; gap: 2px; cursor: pointer; min-width: 0; }
+.slot-body b { font-weight: 600; font-size: 13px; }
+.slot-body small { color: var(--muted); font-size: 11px; }
+.slot-ai { padding: 6px 8px; font-size: 11px; }
+details.more summary { cursor: pointer; font-weight: 600; font-size: 12.5px; padding-block: 6px; }
+details.more[open] summary { margin-bottom: 8px; }
 #avPreview { width: 100%; height: auto; aspect-ratio: 1; border-radius: 10px; display: block; background: var(--stage); }
 .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
 .sw { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
@@ -254,6 +266,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-tab="body">Тело</button>
         <button role="tab" aria-selected="false" data-tab="pose">Позы</button>
+        <button role="tab" aria-selected="false" data-tab="face">Лицо</button>
         <button role="tab" aria-selected="false" data-tab="scan"><span class="tl">Фото → 3D</span><span class="ts">Фото</span></button>
         <button role="tab" aria-selected="false" data-tab="avatar"><span class="tl">Аватар ИЛ</span><span class="ts">Аватар</span></button>
         <button role="tab" aria-selected="false" data-tab="meas">Мерки</button>
@@ -394,6 +407,28 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         <p class="note">В прототипе экспорт отключён.</p>
       </div>
 
+      <div class="pane" data-pane="face" hidden>
+        <div class="field"><span class="label">Эмоция</span><div class="chips" id="emoChips"></div></div>
+        <details class="more"><summary>Тонкая настройка лица</summary><div id="faceSliders" class="sliders"></div></details>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="label">Фото эмоций</span>
+          <p class="note">Загрузите своё фото для каждой эмоции. «Распознать» — Claude прочитает мимику на фото и повторит её на 3D-лице. Фото можно и показать на лице модели.</p>
+        </div>
+        <button class="primary" id="emoAuto">Загрузить фото — Claude сам определит эмоцию</button>
+        <input type="file" id="emoFile" accept="image/*" hidden>
+        <div class="slots" id="emoSlots"></div>
+        <div class="seg"><input type="checkbox" id="showFacePhoto"><label for="showFacePhoto">Показывать фото на лице модели</label></div>
+        <div id="cropBox" class="sliders" hidden>
+          <div class="field"><label for="cropZoom">Масштаб фото</label><input type="range" id="cropZoom" min="0.6" max="2.5" step="0.01" value="1"></div>
+          <div class="field"><label for="cropX">Сдвиг по горизонтали</label><input type="range" id="cropX" min="-0.4" max="0.4" step="0.005" value="0"></div>
+          <div class="field"><label for="cropY">Сдвиг по вертикали</label><input type="range" id="cropY" min="-0.4" max="0.4" step="0.005" value="0"></div>
+        </div>
+        <button id="faceReset">Сбросить выражение этой эмоции</button>
+        <p class="note" id="faceMsg" aria-live="polite"></p>
+        <p class="note">Фото хранятся только в этом браузере. Claude получает фото, только когда вы нажимаете «Распознать» или загружаете фото с автоопределением.</p>
+      </div>
+
       <div class="pane" data-pane="scan" hidden>
         <div class="ringwrap">
           <svg viewBox="0 0 100 100" id="frameRing" aria-hidden="true"></svg>
@@ -494,6 +529,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     $$('.pane[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
     poseTabOpen = b.dataset.tab === 'pose'; applyMode();
     avOpen = b.dataset.tab === 'avatar'; if (avOpen) refreshAvatar();
+    setFaceView(b.dataset.tab === 'face');
   }));
 
   /* ---------- Three.js scene ---------- */
@@ -650,6 +686,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     });
     const hair = add(neck, new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.52), 0, 0.1 * h, -0.008 * h);
     hair.scale.set(0.047 * h, 0.064 * h, 0.058 * h); hair.rotation.x = -0.32; hair.userData.part = 'hair';
+    buildFace(neck, h);
 
     // Arms (L = character's left = +x)
     [['L', 1], ['R', -1]].forEach(([s, side]) => {
@@ -693,7 +730,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   function applyMode() {
     meshes.forEach(m => {
       const sel = (poseTabOpen || posing) && m.userData.joint === selJoint;
-      m.material = mode === 'clay' ? (sel ? selMat : m.userData.part === 'eye' ? eyeMat : clayMat) : mode === 'wire' ? (sel ? selWireMat : wireMat) : hiddenMat;
+      m.material = mode === 'clay' ? (sel ? selMat : m.userData.part === 'eye' ? eyeMat : m.userData.part === 'brow' ? browMat : m.userData.part === 'lips' ? lipMat : clayMat) : mode === 'wire' ? (sel ? selWireMat : wireMat) : hiddenMat;
       m.children[0].visible = mode === 'points';
     });
   }
@@ -848,7 +885,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     J.root.position.y -= box.min.y;
     const lying = Math.abs(poseNow.root[0]) > 40 || Math.abs(poseNow.root[2]) > 40;
     if (lying) { J.root.position.x -= (box.min.x + box.max.x) / 2; J.root.position.z -= (box.min.z + box.max.z) / 2; }
-    targetY = (box.max.y - box.min.y) * 0.5;
+    targetY = faceView && J.neck ? J.neck.getWorldPosition(new THREE.Vector3()).y + 0.085 * P.height / 100 : (box.max.y - box.min.y) * 0.5;
     body.updateMatrixWorld(true);
     stool.visible = poseProp === 'stool';
     if (stool.visible) {
@@ -859,8 +896,10 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     }
   }
 
+  const POSE_FACE = { 'Победа': 'laugh', 'Испуг': 'fear', 'Супергерой': 'smile', 'Задумчивость': 'calm', 'Пожимание плечами': 'disgust', 'Приветствие': 'smile', 'Аплодисменты': 'laugh', 'Диско': 'smile', 'Селфи': 'smile', 'Поклон': 'smile' };
   function setPose(entry, instant) {
     if (anim) stopAnim();
+    if (entry && POSE_FACE[entry.name]) selectEmotion(POSE_FACE[entry.name]);
     poseProp = entry.prop || null;
     if (instant || reduceMotion) { poseNow = clonePose(entry.pose); poseTo = null; applyPose(poseNow); syncJointSliders(); return; }
     poseFrom = clonePose(poseNow); poseTo = clonePose(entry.pose); poseT = 0;
@@ -1020,8 +1059,10 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   }));
 
   let anim = null, animT = 0, animSpeed = 1, animPaused = false;
+  const ANIM_FACE = { 'Радость': 'laugh', 'Грусть': 'sad', 'Злость': 'angry', 'Смех': 'laugh', 'Испуг': 'fear', 'Помахать рукой': 'smile', 'Помахать двумя руками': 'smile', 'Воздушный поцелуй': 'smile', 'Кивок «да»': 'smile', 'Покачать головой «нет»': 'disgust', 'Пожимание плечами': 'disgust', 'Диско': 'smile', 'Твист': 'smile', 'Флосс': 'laugh', 'Аплодисменты': 'laugh', 'Сидя смеяться': 'laugh', 'Отдых лёжа': 'calm', 'Глубокое дыхание': 'calm', 'Поклон': 'smile', 'Хлопки над головой': 'laugh', 'Бокс: двойка': 'angry', 'Бокс: уклоны': 'angry', 'Удар ногой': 'angry', 'Прыжок вверх': 'surprise' };
   function playAnim(a) {
     stopShow(); if (posing) setPosing(false);
+    if (ANIM_FACE[a.name]) selectEmotion(ANIM_FACE[a.name]);
     anim = a; animT = 0; animPaused = false; poseTo = null; poseProp = a.prop || null; activeName = null;
     $('#animPause').textContent = 'Пауза'; $('#animPause').disabled = false; $('#animStop').disabled = false;
     renderAnimGrid();
@@ -1064,6 +1105,256 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     if (a) renderAnimGrid();
   }));
   renderAnimGrid();
+
+  /* ---------- Face: brows, eyelids and mouth driven by a few expression values ---------- */
+  // browUp −1..1, browTilt −1 (angry) .. 1 (sad), eyeL/eyeR 0 closed .. 1.3 wide, smile −1..1, open 0..1, width 0.7..1.3
+  const EMOTIONS = [
+    ['neutral', 'Нейтральное', { browUp: 0, browTilt: 0, eyeL: 1, eyeR: 1, smile: 0.05, open: 0, width: 1 }],
+    ['smile', 'Улыбка', { browUp: 0.15, browTilt: 0, eyeL: 0.9, eyeR: 0.9, smile: 0.8, open: 0.05, width: 1.15 }],
+    ['laugh', 'Смех', { browUp: 0.35, browTilt: 0.1, eyeL: 0.45, eyeR: 0.45, smile: 1, open: 0.75, width: 1.2 }],
+    ['sad', 'Грусть', { browUp: 0.1, browTilt: 1, eyeL: 0.75, eyeR: 0.75, smile: -0.8, open: 0, width: 0.9 }],
+    ['angry', 'Злость', { browUp: -0.6, browTilt: -1, eyeL: 0.8, eyeR: 0.8, smile: -0.45, open: 0.15, width: 0.95 }],
+    ['surprise', 'Удивление', { browUp: 1, browTilt: 0.2, eyeL: 1.3, eyeR: 1.3, smile: 0, open: 0.85, width: 0.75 }],
+    ['fear', 'Страх', { browUp: 0.8, browTilt: 0.8, eyeL: 1.25, eyeR: 1.25, smile: -0.35, open: 0.4, width: 1.1 }],
+    ['disgust', 'Отвращение', { browUp: -0.4, browTilt: -0.4, eyeL: 0.6, eyeR: 0.7, smile: -0.6, open: 0.12, width: 0.9 }],
+    ['wink', 'Подмигивание', { browUp: 0.1, browTilt: 0, eyeL: 1, eyeR: 0, smile: 0.7, open: 0, width: 1.1 }],
+    ['calm', 'Спокойствие', { browUp: 0, browTilt: 0.1, eyeL: 0.05, eyeR: 0.05, smile: 0.25, open: 0, width: 1 }],
+  ];
+  const EMO = Object.fromEntries(EMOTIONS.map(([k, n, p]) => [k, { key: k, name: n, params: p }]));
+  const FACE_KEYS = ['browUp', 'browTilt', 'eyeL', 'eyeR', 'smile', 'open', 'width'];
+  let faceNow = { ...EMO.neutral.params }, faceTo = null, FACE = null;
+  const lipMat = new THREE.MeshStandardMaterial({ color: '#9a5a52', roughness: 0.5 });
+  const browMat = new THREE.MeshStandardMaterial({ color: '#3a2c26', roughness: 0.8 });
+
+  function buildFace(neck, h) {
+    const F = { h };
+    const eyeY = 0.1 * h, eyeX = 0.0165 * h, eyeZ = 0.0445 * h, er = 0.0068 * h;
+    [['L', 1], ['R', -1]].forEach(([s, side]) => {
+      // upper lid: a skin cap over the eyeball that rotates down to close
+      const lid = add(neck, new THREE.SphereGeometry(er * 1.14, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), side * eyeX, eyeY, eyeZ);
+      lid.userData.part = 'skin'; F['lid' + s] = lid;
+      const low = add(neck, new THREE.SphereGeometry(er * 1.1, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), side * eyeX, eyeY, eyeZ);
+      low.userData.part = 'skin'; F['low' + s] = low;
+      const brow = add(neck, new THREE.SphereGeometry(1, 16, 8), side * eyeX, 0.1115 * h, 0.0478 * h);
+      brow.scale.set(0.0115 * h, 0.0022 * h, 0.0034 * h); brow.userData.part = 'brow'; brow.userData.side = side; F['brow' + s] = brow;
+    });
+    const cav = add(neck, new THREE.SphereGeometry(1, 20, 10), 0, 0.064 * h, 0.044 * h);
+    cav.userData.part = 'eye'; F.cavity = cav;
+    F.upper = add(neck, new THREE.BufferGeometry(), 0, 0, 0); F.upper.userData.part = 'lips';
+    F.lower = add(neck, new THREE.BufferGeometry(), 0, 0, 0); F.lower.userData.part = 'lips';
+    // photo of the face on a curved mask in front of the face
+    const decal = new THREE.Mesh(new THREE.CylinderGeometry(0.066 * h, 0.066 * h, 0.115 * h, 28, 1, true, -1.05, 2.1),
+      new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+    decal.position.set(0, 0.088 * h, -0.004 * h); decal.visible = false; decal.userData.part = 'decal'; decal.renderOrder = 2;
+    neck.add(decal); F.decal = decal;
+    FACE = F;
+    applyFace(faceNow);
+    if (faceDecalTex) setDecal(faceDecalTex);
+  }
+
+  function lipCurve(w, cornerY, centerY, z0, h) {
+    const pts = [];
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8 * 2 - 1;
+      pts.push(new THREE.Vector3(t * w, cornerY + (centerY - cornerY) * (1 - t * t), z0 - 0.007 * h * t * t));
+    }
+    return new THREE.CatmullRomCurve3(pts);
+  }
+  function setGeo(m, g) { m.geometry.dispose(); m.geometry = g; if (m.children[0]) m.children[0].geometry = g; }
+
+  function applyFace(f) {
+    if (!FACE) return;
+    const { h } = FACE;
+    [['L', 1], ['R', -1]].forEach(([s, side]) => {
+      const open = f['eye' + s];
+      FACE['lid' + s].rotation.x = 1.25 - open * 1.65;              // 1 = normally open, 0 = closed
+      FACE['low' + s].rotation.x = -0.75 + Math.max(0, f.smile) * 0.45 * (open < 0.95 ? 1 : 0.6);
+      const b = FACE['brow' + s];
+      b.position.y = 0.1115 * h + f.browUp * 0.0055 * h;
+      b.rotation.z = -side * f.browTilt * 0.38;
+    });
+    const w = 0.0165 * h * f.width, y0 = 0.0645 * h, z0 = 0.0478 * h;
+    const corner = y0 + f.smile * 0.0055 * h;
+    const upC = y0 + f.open * 0.0028 * h - f.smile * 0.0012 * h;
+    const loC = y0 - f.open * 0.0135 * h - Math.max(0, f.smile) * 0.0018 * h + (f.open < 0.02 ? 0.0004 * h : 0);
+    setGeo(FACE.upper, new THREE.TubeGeometry(lipCurve(w, corner, upC, z0, h), 24, 0.0017 * h, 6, false));
+    setGeo(FACE.lower, new THREE.TubeGeometry(lipCurve(w * 0.96, corner, loC, z0 - 0.0004 * h, h), 24, 0.0021 * h, 6, false));
+    FACE.cavity.visible = f.open > 0.04;
+    FACE.cavity.position.y = (upC + loC) / 2;
+    FACE.cavity.scale.set(w * 0.82, Math.max(0.0005 * h, (upC - loC) * 0.5), 0.004 * h);
+  }
+  const faceParams = (k) => (faceSlots && faceSlots[k] && faceSlots[k].params) || EMO[k].params;
+  function setFaceTarget(params, instant) {
+    const p = { ...EMO.neutral.params, ...params };
+    if (instant || reduceMotion) { faceNow = p; faceTo = null; applyFace(faceNow); syncFaceSliders(); return; }
+    faceTo = { from: { ...faceNow }, to: p, t: 0 };
+  }
+  function tweenFace(dt) {
+    if (!faceTo) return;
+    faceTo.t = Math.min(1, faceTo.t + dt / 0.35);
+    const e = faceTo.t < 0.5 ? 2 * faceTo.t ** 2 : 1 - (-2 * faceTo.t + 2) ** 2 / 2;
+    FACE_KEYS.forEach(k => { faceNow[k] = faceTo.from[k] + (faceTo.to[k] - faceTo.from[k]) * e; });
+    applyFace(faceNow);
+    if (faceTo.t >= 1) { faceTo = null; syncFaceSliders(); }
+  }
+
+  /* Face photo on the mask: oval crop with a soft edge */
+  let faceDecalTex = null;
+  function decalTexture(img, crop) {
+    const c = document.createElement('canvas'); c.width = 384; c.height = 448;
+    const x = c.getContext('2d');
+    const s = crop.zoom * Math.max(c.width / img.width, c.height / img.height);
+    const dw = img.width * s, dh = img.height * s;
+    x.drawImage(img, (c.width - dw) / 2 + crop.x * c.width, (c.height - dh) / 2 + crop.y * c.height, dw, dh);
+    // oval mask with feathered edge
+    x.globalCompositeOperation = 'destination-in';
+    const g = x.createRadialGradient(c.width / 2, c.height / 2, c.width * 0.3, c.width / 2, c.height / 2, c.width * 0.5);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.save(); x.translate(c.width / 2, c.height / 2); x.scale(1, c.height / c.width); x.translate(-c.width / 2, -c.height / 2);
+    x.fillStyle = g; x.fillRect(0, 0, c.width, c.width); x.restore();
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  function setDecal(tex) {
+    faceDecalTex = tex;
+    if (!FACE) return;
+    const m = FACE.decal.material;
+    if (m.map && m.map !== tex) m.map.dispose();
+    m.map = tex; m.needsUpdate = true;
+    FACE.decal.visible = !!tex;
+  }
+
+  /* ---------- Face tab UI ---------- */
+  const FACE_STORE = 'silhouette360.faces';
+  let faceSlots = {};
+  try { faceSlots = JSON.parse(localStorage.getItem(FACE_STORE) || '{}'); } catch (e) { faceSlots = {}; }
+  const saveSlots = () => { try { localStorage.setItem(FACE_STORE, JSON.stringify(faceSlots)); } catch (e) { faceMsg('Браузер не дал сохранить фото: хранилище переполнено или недоступно. Фото работают до перезагрузки.'); } };
+  let curEmo = 'neutral', showPhoto = false;
+  const faceMsg = (t) => { $('#faceMsg').textContent = t; };
+
+  $('#emoChips').innerHTML = EMOTIONS.map(([k, n]) => `<button data-emo="${k}" class="${k === curEmo ? 'on' : ''}">${n}</button>`).join('');
+  $$('#emoChips button').forEach(b => b.addEventListener('click', () => selectEmotion(b.dataset.emo)));
+  function selectEmotion(k) {
+    curEmo = k;
+    $$('#emoChips button').forEach(b => b.classList.toggle('on', b.dataset.emo === k));
+    const slot = faceSlots[k];
+    setFaceTarget(slot && slot.params ? slot.params : EMO[k].params);
+    refreshDecal(); renderSlots();
+  }
+
+  // fine sliders
+  const FACE_SLIDERS = [['browUp', 'Брови: вниз ↔ вверх', -1, 1], ['browTilt', 'Брови: злые ↔ грустные', -1, 1], ['eyeL', 'Левый глаз открыт', 0, 1.3], ['eyeR', 'Правый глаз открыт', 0, 1.3], ['smile', 'Уголки рта: вниз ↔ улыбка', -1, 1], ['open', 'Рот открыт', 0, 1], ['width', 'Ширина рта', 0.7, 1.3]];
+  $('#faceSliders').innerHTML = FACE_SLIDERS.map(([k, n, lo, hi]) => `<div class="field"><div class="row"><label for="f-${k}">${n}</label><output id="fo-${k}"></output></div><input type="range" id="f-${k}" min="${lo}" max="${hi}" step="0.01"></div>`).join('');
+  FACE_SLIDERS.forEach(([k]) => $(`#f-${k}`).addEventListener('input', e => {
+    faceTo = null; faceNow[k] = +e.target.value; applyFace(faceNow); $(`#fo-${k}`).textContent = (+e.target.value).toFixed(2);
+    $$('#emoChips button').forEach(b => b.classList.remove('on'));
+  }));
+  function syncFaceSliders() { FACE_SLIDERS.forEach(([k]) => { const el = $(`#f-${k}`); if (el) { el.value = faceNow[k]; $(`#fo-${k}`).textContent = (+faceNow[k]).toFixed(2); } }); }
+
+  // emotion photos
+  const fileToImage = (file) => new Promise((res, rej) => { const u = URL.createObjectURL(file); const im = new Image(); im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = rej; im.src = u; });
+  const shrink = (im, max) => { const s = Math.min(1, max / Math.max(im.width, im.height)); const c = document.createElement('canvas'); c.width = Math.round(im.width * s); c.height = Math.round(im.height * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); return c; };
+  const imgCache = {};
+  function slotImage(k) {
+    const sl = faceSlots[k]; if (!sl || !sl.img) return Promise.resolve(null);
+    if (imgCache[k] && imgCache[k].src === sl.img) return Promise.resolve(imgCache[k]);
+    return new Promise(res => { const im = new Image(); im.onload = () => { imgCache[k] = im; res(im); }; im.onerror = () => res(null); im.src = sl.img; });
+  }
+  async function refreshDecal() {
+    const sl = faceSlots[curEmo];
+    $('#cropBox').hidden = !(sl && sl.img);
+    if (!showPhoto || !sl || !sl.img) { setDecal(null); return; }
+    const im = await slotImage(curEmo); if (!im) return;
+    const crop = sl.crop || (sl.crop = { zoom: 1, x: 0, y: 0 });
+    $('#cropZoom').value = crop.zoom; $('#cropX').value = crop.x; $('#cropY').value = crop.y;
+    setDecal(decalTexture(im, crop));
+  }
+  ['cropZoom', 'cropX', 'cropY'].forEach(id => $('#' + id).addEventListener('input', () => {
+    const sl = faceSlots[curEmo]; if (!sl) return;
+    sl.crop = { zoom: +$('#cropZoom').value, x: +$('#cropX').value, y: +$('#cropY').value };
+    refreshDecal();
+  }));
+  ['cropZoom', 'cropX', 'cropY'].forEach(id => $('#' + id).addEventListener('change', saveSlots));
+  $('#showFacePhoto').addEventListener('change', e => { showPhoto = e.target.checked; refreshDecal(); });
+
+  function renderSlots() {
+    $('#emoSlots').innerHTML = EMOTIONS.map(([k, n]) => {
+      const sl = faceSlots[k];
+      return `<div class="slot${k === curEmo ? ' on' : ''}" data-k="${k}">
+        <button class="slot-pic" data-pick="${k}" aria-label="${sl && sl.img ? 'Заменить' : 'Загрузить'} фото: ${n}">${sl && sl.img ? `<img src="${sl.img}" alt="">` : '<span>+ фото</span>'}</button>
+        <div class="slot-body"><b>${n}</b><small>${sl && sl.params ? 'выражение с фото' : sl && sl.img ? 'фото загружено' : 'нет фото'}</small></div>
+        ${sl && sl.img ? `<button class="slot-ai" data-ai="${k}">Распознать</button><button class="pose-del" data-rm="${k}" aria-label="Удалить фото ${n}">×</button>` : ''}
+      </div>`;
+    }).join('');
+    $$('#emoSlots [data-pick]').forEach(b => b.addEventListener('click', () => { pickFor = b.dataset.pick; $('#emoFile').click(); }));
+    $$('#emoSlots [data-ai]').forEach(b => b.addEventListener('click', () => recognize(b.dataset.ai)));
+    $$('#emoSlots [data-rm]').forEach(b => b.addEventListener('click', () => { delete faceSlots[b.dataset.rm]; saveSlots(); if (b.dataset.rm === curEmo) selectEmotion(curEmo); else renderSlots(); }));
+    $$('#emoSlots .slot-body').forEach(b => b.addEventListener('click', () => selectEmotion(b.parentElement.dataset.k)));
+  }
+  let pickFor = null; // emotion key, or 'auto' to let Claude decide
+  $('#emoAuto').addEventListener('click', () => { pickFor = 'auto'; $('#emoFile').click(); });
+  $('#emoFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f || !pickFor) return;
+    try {
+      const im = await fileToImage(f);
+      const data = shrink(im, 320).toDataURL('image/jpeg', 0.85);
+      if (pickFor === 'auto') {
+        faceMsg('Claude смотрит на фото…');
+        const res = await analyse(data);
+        if (!res) return;
+        const k = EMO[res.emotion] ? res.emotion : 'neutral';
+        faceSlots[k] = { img: data, params: res.params, crop: { zoom: 1, x: 0, y: 0 } };
+        saveSlots(); selectEmotion(k);
+        faceMsg(`На фото: ${EMO[k].name.toLowerCase()}${res.confidence != null ? ` (уверенность ${Math.round(res.confidence * 100)}%)` : ''}. Выражение перенесено на модель.`);
+      } else {
+        faceSlots[pickFor] = { img: data, crop: { zoom: 1, x: 0, y: 0 } };
+        saveSlots(); selectEmotion(pickFor);
+        faceMsg('Фото сохранено. Нажмите «Распознать», чтобы перенести выражение на 3D-лицо, или включите фото на лице.');
+      }
+    } catch (err) { faceMsg('Не получилось открыть файл. Подойдут JPG, PNG или HEIC, открытые в галерее телефона.'); }
+  });
+
+  // Ask Claude to read the expression from the photo
+  let sampleImg = null;
+  if (window.claude && claude.use) claude.use('sample').then(async s => { if (s) { try { const l = await s.limits(); if (l && l.images) sampleImg = s; } catch (e) { /* no images */ } } });
+  const dataToBlob = async (url) => (await fetch(url)).blob();
+  async function analyse(dataUrl) {
+    if (!sampleImg) { faceMsg('Распознавание работает, когда прототип открыт в Claude и разрешена отправка картинок. Выберите эмоцию вручную: нажмите «+ фото» у нужной строки.'); return null; }
+    const prompt = `Посмотри на лицо на фото и опиши мимику для 3D-аватара.
+Верни только JSON:
+{"emotion": одно из ["neutral","smile","laugh","sad","angry","surprise","fear","disgust","wink","calm"],
+ "confidence": 0..1,
+ "params": {"browUp": -1..1 (брови опущены/подняты), "browTilt": -1..1 (-1 сведены зло, 1 домиком грустно),
+  "eyeL": 0..1.3 (левый глаз человека: 0 закрыт, 1 обычно, 1.3 широко), "eyeR": 0..1.3,
+  "smile": -1..1 (уголки рта вниз/вверх), "open": 0..1 (рот открыт), "width": 0.7..1.3 (ширина рта)}}
+Если лица на фото нет, верни {"emotion":"none"}.`;
+    try {
+      const r = await sampleImg.json(prompt, { images: [await dataToBlob(dataUrl)] });
+      if (!r || r.emotion === 'none') { faceMsg('Claude не нашёл на фото лицо. Попробуйте снимок крупнее, анфас.'); return null; }
+      const p = { ...EMO.neutral.params };
+      FACE_KEYS.forEach(k => { const v = r.params && +r.params[k]; if (Number.isFinite(v)) p[k] = v; });
+      p.browUp = Math.max(-1, Math.min(1, p.browUp)); p.browTilt = Math.max(-1, Math.min(1, p.browTilt));
+      p.eyeL = Math.max(0, Math.min(1.3, p.eyeL)); p.eyeR = Math.max(0, Math.min(1.3, p.eyeR));
+      p.smile = Math.max(-1, Math.min(1, p.smile)); p.open = Math.max(0, Math.min(1, p.open)); p.width = Math.max(0.7, Math.min(1.3, p.width));
+      return { emotion: r.emotion, confidence: r.confidence, params: p };
+    } catch (e) {
+      faceMsg(e.code === 'not_granted' ? 'Доступ к Claude не разрешён — выберите эмоцию вручную.' : e.code === 'rate_limited' ? 'Слишком часто — подождите немного.' : e.code === 'images_unavailable' ? 'Отправка картинок в Claude недоступна в этом просмотре.' : 'Claude не ответил как нужно. Попробуйте ещё раз.');
+      return null;
+    }
+  }
+  async function recognize(k) {
+    const sl = faceSlots[k]; if (!sl || !sl.img) return;
+    faceMsg('Claude смотрит на фото…');
+    const res = await analyse(sl.img);
+    if (!res) return;
+    sl.params = res.params; saveSlots(); selectEmotion(k);
+    const note = res.emotion !== k && EMO[res.emotion] ? ` Похоже скорее на «${EMO[res.emotion].name.toLowerCase()}».` : '';
+    faceMsg(`Выражение с фото перенесено на модель.${note}`);
+  }
+  $('#faceReset').addEventListener('click', () => { delete (faceSlots[curEmo] || {}).params; saveSlots(); selectEmotion(curEmo); faceMsg('Выражение вернулось к стандартному.'); });
+
+  renderSlots(); syncFaceSliders();
 
   /* ---------- Custom pose editor ---------- */
   const msg = (t) => { $('#poseMsg').textContent = t; };
@@ -1188,6 +1479,15 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
 
   /* ---------- Posing by hand: drag a body part, it turns in its joint and follows the pointer ---------- */
   let posing = false, grab = null;
+  // face tab: bring the camera close to the face, restore on leaving
+  let faceView = false, distBefore = null;
+  function setFaceView(v) {
+    if (v === faceView) return;
+    faceView = v;
+    if (v) { distBefore = dist; dist = 1.45; setSpin(false); const want = 0.35; animTo = az + (((want - az) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI; }
+    else if (distBefore) dist = distBefore;
+    if (J.root) ground();
+  }
   const qTmp = new THREE.Quaternion(), qPar = new THREE.Quaternion(), axisV = new THREE.Vector3(), jW = new THREE.Vector3();
   const R2D = 180 / Math.PI;
   function setPosing(v) {
@@ -1651,10 +1951,10 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
     floor.rotation.x = -Math.PI / 2; sc.add(floor);
     sc.add(new THREE.HemisphereLight(0xffffff, 0x777777, 0.7));
     const flash = new THREE.DirectionalLight(0xffffff, 0.65); sc.add(flash, flash.target);
-    const outfit = { bottom: '#2d3440', shoes: '#5b3a28', top: '#3f72a6', skin: '#9a5f45', eye: '#1d1b22', hair: '#3a2a20' };
+    const outfit = { bottom: '#2d3440', shoes: '#5b3a28', top: '#3f72a6', skin: '#9a5f45', eye: '#1d1b22', hair: '#3a2a20', brow: '#3a2a20', lips: '#7a4038' };
     const mats = {}; Object.entries(outfit).forEach(([k, c]) => { mats[k] = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }); });
     const clone = body.clone(true); clone.visible = true;
-    clone.traverse(o => { if (o.isPoints) o.visible = false; else if (o.isMesh) { if (o.material === ringMat) o.visible = false; else o.material = mats[o.userData.part] || mats.top; } });
+    clone.traverse(o => { if (o.isPoints) o.visible = false; else if (o.isMesh) { if (o.material === ringMat) o.visible = false; else if (o.userData.part !== 'decal') o.material = mats[o.userData.part] || mats.top; } });
     sc.add(clone);
     // phone main camera: 26 mm equivalent, held at waist height 2.6 m away
     const vfov = 2 * Math.atan((Hpx / 2) / (26 / 43.27 * Math.hypot(W, Hpx))) * 180 / Math.PI;
@@ -1723,7 +2023,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   const toonGrad = (() => { const d = new Uint8Array([70, 70, 70, 255, 160, 160, 160, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 3, 1, THREE.RGBAFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 
   function materialFor(part, style) {
-    const hex = part === 'eye' ? '#1b1a20' : part === 'shoes' ? '#3b2a20' : PALETTE[part] ? PALETTE[part][AV[part]] : '#ccc';
+    const hex = part === 'eye' ? '#1b1a20' : part === 'shoes' ? '#3b2a20' : part === 'brow' ? PALETTE.hair[AV.hair] : part === 'lips' ? '#a0574e' : PALETTE[part] ? PALETTE[part][AV[part]] : '#ccc';
     const col = new THREE.Color(hex).convertSRGBToLinear(); // palette hexes are sRGB
     if (part === 'eye' && style !== 'marble' && style !== 'gold' && style !== 'clay') return new THREE.MeshStandardMaterial({ color: col, roughness: 0.15 });
     switch (style) {
@@ -1753,6 +2053,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
         if (m.isPoints) m.visible = false;
         else if (m.isMesh) {
           if (m.material === ringMat) { m.visible = false; return; }
+          if (m.userData.part === 'decal') return;
           const part = m.userData.part || 'top';
           m.material = mats[part] || (mats[part] = materialFor(part, style));
         }
@@ -1810,12 +2111,14 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   }
 
   // Render with a temporary pose, then restore the live one
+  const STICKER_FACE = { 'Приветствие': 'smile', 'Победа': 'laugh', 'Задумчивость': 'calm', 'Пожимание плечами': 'disgust', 'Аплодисменты': 'laugh', 'Супергерой': 'smile' };
   function renderInPose(name, size, o) {
     const entry = LIB.find(p => p.name === name);
-    const keep = clonePose(poseNow), keepProp = poseProp, keepT = targetY;
+    const keep = clonePose(poseNow), keepProp = poseProp, keepT = targetY, keepFace = { ...faceNow };
     poseNow = clonePose(entry.pose); poseProp = entry.prop || null; applyPose(poseNow);
+    if (STICKER_FACE[name]) applyFace(faceParams(STICKER_FACE[name]));
     const c = renderAvatar(size, o);
-    poseNow = keep; poseProp = keepProp; applyPose(poseNow); targetY = keepT;
+    poseNow = keep; poseProp = keepProp; applyPose(poseNow); targetY = keepT; applyFace(keepFace);
     return c;
   }
   function stickerCanvas(i, size) {
@@ -2132,6 +2435,7 @@ input[type=number] { font: 400 13px/1.3 var(--f-mono); color: var(--ink); backgr
   function frame(t) {
     const dt = Math.min(0.05, (t - last) / 1000); last = t;
     if (anim) stepAnim(dt); else tweenPose(dt);
+    tweenFace(dt);
     target.y += (targetY - target.y) * Math.min(1, dt * 4);
     if (animTo !== null) { az += (animTo - az) * Math.min(1, dt * 7); if (Math.abs(animTo - az) < 0.002) { az = animTo; animTo = null; } }
     else if (spin && ptrs.size === 0) az += dt * 0.35;
