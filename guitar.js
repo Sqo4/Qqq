@@ -49,9 +49,10 @@
   const fingerX = f => fretX(f) - (fretX(f) - fretX(f - 1)) * 0.38;
 
   const STRING_W = [3.4, 2.8, 2.3, 1.8, 1.3, 1.0];
-  const STRING_COLOR = ['#c99550', '#cc9a56', '#d0a05c', '#d4a662', '#e3e3e3', '#ececec'];
+  const WOUND = [true, true, true, true, false, false];
 
   /* ---------------- Построение SVG ---------------- */
+  // Цвета отделки берутся из CSS-переменных --g-*, поэтому у каждого варианта оформления своя гитара.
 
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.getElementById('guitar');
@@ -63,6 +64,10 @@
     return e;
   }
 
+  // Детерминированный «случай», чтобы рисунок древесины был одинаковым при каждой загрузке.
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
   const BODY_PATH =
     `M 740,${CY} C 740,150 775,100 850,100 C 920,100 940,135 975,135 ` +
     `C 1020,135 1060,60 1190,60 C 1300,60 1360,140 1360,${CY} ` +
@@ -70,165 +75,239 @@
     `C 940,345 920,380 850,380 C 775,380 740,330 740,${CY} Z`;
 
   const HEAD_PATH =
-    `M ${NUT + 2},${CY - 49} L 138,${CY - 56} C 100,${CY - 62} 44,${CY - 68} 20,${CY - 60} ` +
-    `Q 6,${CY - 40} 12,${CY} Q 6,${CY + 40} 20,${CY + 60} ` +
-    `C 44,${CY + 68} 100,${CY + 62} 138,${CY + 56} L ${NUT + 2},${CY + 49} Z`;
+    `M ${NUT + 2},${CY - 47} L 136,${CY - 54} C 110,${CY - 60} 60,${CY - 66} 24,${CY - 64} ` +
+    `C 12,${CY - 63} 6,${CY - 52} 8,${CY - 36} Q 14,${CY} 8,${CY + 36} ` +
+    `C 6,${CY + 52} 12,${CY + 63} 24,${CY + 64} C 60,${CY + 66} 110,${CY + 60} 136,${CY + 54} ` +
+    `L ${NUT + 2},${CY + 47} Z`;
 
-  const neckPoly = (pad) => {
-    const x0 = NUT, x1 = BOARD_END;
+  const GUARD_PATH =
+    `M 992,${CY + 44} C 1034,${CY + 58} 1066,${CY + 102} 1054,${CY + 142} ` +
+    `C 1038,${CY + 178} 958,${CY + 168} 944,${CY + 122} C 960,${CY + 110} 986,${CY + 80} 992,${CY + 44} Z`;
+
+  const neckPoly = (pad, x1 = BOARD_END) => {
+    const x0 = NUT;
     return `${x0},${CY - neckHalf(x0) - pad} ${x1},${CY - neckHalf(x1) - pad} ` +
            `${x1},${CY + neckHalf(x1) + pad} ${x0},${CY + neckHalf(x0) + pad}`;
   };
 
+  const v = name => `var(--g-${name})`;
+  const stop = (o, color, op = 1) => `<stop offset="${o}" style="stop-color:${color};stop-opacity:${op}"/>`;
+
   el('defs', {}, svg).innerHTML = `
-    <radialGradient id="sunburst" gradientUnits="userSpaceOnUse" cx="1060" cy="${CY}" r="330">
-      <stop offset="0" stop-color="#f6cf86"/>
-      <stop offset=".45" stop-color="#e3a453"/>
-      <stop offset=".72" stop-color="#9c4a17"/>
-      <stop offset=".9" stop-color="#4a1d08"/>
-      <stop offset="1" stop-color="#220c03"/>
+    <linearGradient id="topBase" x1="0" y1="0" x2="0" y2="1">
+      ${stop(0, v('top-b'))}${stop(0.5, v('top-a'))}${stop(1, v('top-b'))}
+    </linearGradient>
+    <radialGradient id="burst" gradientUnits="userSpaceOnUse" cx="1070" cy="${CY}" r="345">
+      ${stop(0, v('burst'), 0)}${stop(0.5, v('burst'), 0)}${stop(0.78, v('burst'), 'var(--g-burst-op)')}${stop(1, v('edge'), 1)}
     </radialGradient>
-    <radialGradient id="hole" cx=".45" cy=".4" r=".6">
-      <stop offset="0" stop-color="#2a170b"/>
-      <stop offset="1" stop-color="#050302"/>
+    <radialGradient id="hole" cx=".42" cy=".38" r=".65">
+      ${stop(0, '#1b0f07')}${stop(0.7, '#070403')}${stop(1, '#000')}
     </radialGradient>
     <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3b2416"/>
-      <stop offset=".5" stop-color="#26150c"/>
-      <stop offset="1" stop-color="#3b2416"/>
+      ${stop(0, v('board-b'))}${stop(0.5, v('board'))}${stop(1, v('board-b'))}
     </linearGradient>
-    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3a2114"/>
-      <stop offset=".5" stop-color="#1e0f07"/>
-      <stop offset="1" stop-color="#3a2114"/>
+    <linearGradient id="headGrad" x1="0" y1="0" x2="0" y2="1">
+      ${stop(0, v('head-b'))}${stop(0.5, v('head'))}${stop(1, v('head-b'))}
     </linearGradient>
     <linearGradient id="fret" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#8d8d8d"/>
-      <stop offset=".5" stop-color="#f7f7f7"/>
-      <stop offset="1" stop-color="#9a9a9a"/>
+      ${stop(0, '#7d7d7d')}${stop(0.45, '#ffffff')}${stop(0.6, '#d8d8d8')}${stop(1, '#6f6f6f')}
     </linearGradient>
-    <radialGradient id="chrome" cx=".35" cy=".35" r=".7">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset=".5" stop-color="#bdbdbd"/>
-      <stop offset="1" stop-color="#6d6d6d"/>
+    <radialGradient id="chrome" cx=".32" cy=".3" r=".75">
+      ${stop(0, '#ffffff')}${stop(0.35, '#e2e2e2')}${stop(0.7, '#8e8e8e')}${stop(1, '#4a4a4a')}
     </radialGradient>
+    <linearGradient id="chromeBar" x1="0" y1="0" x2="1" y2="0">
+      ${stop(0, '#5c5c5c')}${stop(0.5, '#f2f2f2')}${stop(1, '#5c5c5c')}
+    </linearGradient>
+    <radialGradient id="pearl" cx=".35" cy=".35" r=".8">
+      ${stop(0, '#ffffff')}${stop(0.35, '#f4eef6')}${stop(0.6, '#d6e7ef')}${stop(0.85, '#efe1cf')}${stop(1, '#b9b2c4')}
+    </radialGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="1" y2="0">
+      ${stop(0, '#cfc4a8')}${stop(0.5, '#fbf6e8')}${stop(1, '#d8ceb4')}
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      ${stop(0, '#fff1b8')}${stop(0.5, '#d9a93c')}${stop(1, '#8a6315')}
+    </linearGradient>
     <radialGradient id="fingertip" cx=".4" cy=".35" r=".7">
-      <stop offset="0" stop-color="#ffe2c4"/>
-      <stop offset=".7" stop-color="#f0a77a"/>
-      <stop offset="1" stop-color="#c36f45"/>
+      ${stop(0, '#ffe2c4')}${stop(0.7, '#f0a77a')}${stop(1, '#c36f45')}
     </radialGradient>
-    <filter id="grain" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.0025 0.09" numOctaves="3" seed="4"/>
-      <feColorMatrix values="0 0 0 0 0.25  0 0 0 0 0.12  0 0 0 0 0.03  1.7 0 0 0 -0.62"/>
+    <radialGradient id="gloss" cx=".5" cy=".5" r=".5">
+      ${stop(0, '#ffffff', 0.55)}${stop(1, '#ffffff', 0)}
+    </radialGradient>
+    <filter id="boardGrain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.0035 0.32" numOctaves="3" seed="11"/>
+      <feColorMatrix values="0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0 0.01  2.2 0 0 0 -0.9"/>
     </filter>
-    <filter id="shadow" x="-10%" y="-20%" width="120%" height="140%">
-      <feGaussianBlur stdDeviation="10"/>
+    <filter id="topTexture" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.0018 0.22" numOctaves="2" seed="3"/>
+      <feColorMatrix values="0 0 0 0 0.3  0 0 0 0 0.16  0 0 0 0 0.05  1.4 0 0 0 -0.55"/>
     </filter>
-    <clipPath id="bodyClip"><path d="${BODY_PATH}"/></clipPath>`;
+    <filter id="tortoise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.07 0.1" numOctaves="4" seed="21"/>
+      <feColorMatrix values="0 0 0 0 0.55  0 0 0 0 0.22  0 0 0 0 0.04  3.6 0 0 0 -1.75"/>
+    </filter>
+    <filter id="shadow" x="-10%" y="-20%" width="120%" height="140%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="14"/></filter>
+    <filter id="stringShadow" x="-2%" y="-20%" width="104%" height="140%"><feGaussianBlur stdDeviation="1.4"/></filter>
+    <clipPath id="bodyClip"><path d="${BODY_PATH}"/></clipPath>
+    <clipPath id="boardClip"><polygon points="${neckPoly(0)}"/></clipPath>
+    <clipPath id="guardClip"><path d="${GUARD_PATH}"/></clipPath>
+    <clipPath id="holeClip"><circle cx="935" cy="${CY}" r="56"/></clipPath>`;
 
   const root = el('g', { id: 'g-root' }, svg);
 
-  // Тень от гитары на столе (статичная, рисуется один раз).
-  const shadow = el('g', { transform: 'translate(10 18)', filter: 'url(#shadow)', opacity: '.55' }, root);
+  // Тень от гитары на поверхности (статичная).
+  const shadow = el('g', { transform: 'translate(12 20)', filter: 'url(#shadow)', style: 'opacity:var(--g-shadow-op)' }, root);
   el('path', { d: BODY_PATH, fill: '#000' }, shadow);
-  el('polygon', { points: neckPoly(3), fill: '#000' }, shadow);
+  el('polygon', { points: neckPoly(4), fill: '#000' }, shadow);
   el('path', { d: HEAD_PATH, fill: '#000' }, shadow);
 
-  // Корпус.
-  el('path', { d: BODY_PATH, fill: 'url(#sunburst)' }, root);
-  el('rect', { x: 730, y: 50, width: 640, height: 380, filter: 'url(#grain)', 'clip-path': 'url(#bodyClip)', opacity: '.55' }, root);
-  el('path', { d: BODY_PATH, fill: 'none', stroke: '#f3e6cc', 'stroke-width': 5 }, root);
-  el('path', { d: BODY_PATH, fill: 'none', stroke: '#1b0b03', 'stroke-width': 1.5 }, root);
+  /* --- Корпус --- */
+  el('path', { d: BODY_PATH, fill: 'url(#topBase)' }, root);
+  const top = el('g', { 'clip-path': 'url(#bodyClip)' }, root);
+  // волокна ели идут вдоль струн
+  const grain = el('g', { style: `stroke:${v('grain')};opacity:var(--g-grain-op)`, fill: 'none' }, top);
+  for (let y = 52; y < 430; y += 2.2 + rnd() * 5.5) {
+    const w1 = (rnd() - 0.5) * 3, w2 = (rnd() - 0.5) * 3, w3 = (rnd() - 0.5) * 2;
+    el('path', {
+      d: `M 730,${y.toFixed(1)} C 900,${(y + w1).toFixed(1)} 1120,${(y + w2).toFixed(1)} 1370,${(y + w3).toFixed(1)}`,
+      'stroke-width': (0.5 + rnd() * 1.3).toFixed(2), opacity: (0.25 + rnd() * 0.75).toFixed(2),
+    }, grain);
+  }
+  el('rect', { x: 730, y: 50, width: 640, height: 380, filter: 'url(#topTexture)', style: 'opacity:var(--g-grain-op)' }, top);
+  el('rect', { x: 730, y: 50, width: 640, height: 380, fill: 'url(#burst)' }, top);
 
-  // Накладка (пикгард) под розеткой.
-  el('path', {
-    d: `M 990,${CY + 44} C 1030,${CY + 60} 1060,${CY + 100} 1050,${CY + 140} ` +
-       `C 1035,${CY + 175} 960,${CY + 165} 945,${CY + 120} C 960,${CY + 110} 985,${CY + 80} 990,${CY + 44} Z`,
-    fill: '#2a0f05', opacity: '.85',
-  }, root);
+  // Окантовка и пёрфлинг.
+  const inset = (k) => `translate(1050 ${CY}) scale(${k}) translate(-1050 ${-CY})`;
+  el('path', { d: BODY_PATH, fill: 'none', style: `stroke:${v('purfling')}`, 'stroke-width': 2.2, transform: inset(0.984) }, root);
+  el('path', { d: BODY_PATH, fill: 'none', style: `stroke:${v('binding')}`, 'stroke-width': 6 }, root);
+  el('path', { d: BODY_PATH, fill: 'none', stroke: 'rgba(0,0,0,.55)', 'stroke-width': 1.2 }, root);
+  el('path', { d: BODY_PATH, fill: 'none', stroke: 'rgba(0,0,0,.25)', 'stroke-width': 1, transform: inset(0.974) }, root);
+
+  // Накладка (черепаховая или однотонная).
+  const guard = el('g', { style: 'opacity:var(--g-guard-op)' }, root);
+  el('path', { d: GUARD_PATH, style: `fill:${v('guard')}` }, guard);
+  el('rect', { x: 930, y: CY + 40, width: 140, height: 145, filter: 'url(#tortoise)', 'clip-path': 'url(#guardClip)', style: 'opacity:var(--g-tortoise)' }, guard);
+  el('path', { d: GUARD_PATH, fill: 'none', stroke: 'rgba(255,255,255,.18)', 'stroke-width': 1 }, guard);
 
   // Розетка и резонаторное отверстие.
   const HOLE_X = 935, HOLE_R = 56;
-  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 16, fill: 'none', stroke: '#1d0d04', 'stroke-width': 2 }, root);
-  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 11, fill: 'none', stroke: '#e9d6b0', 'stroke-width': 5, 'stroke-dasharray': '3 2' }, root);
-  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 6, fill: 'none', stroke: '#1d0d04', 'stroke-width': 2 }, root);
-  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R, fill: 'url(#hole)', stroke: '#140802', 'stroke-width': 2 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 19, fill: 'none', stroke: '#140802', 'stroke-width': 1.6 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 15, fill: 'none', style: `stroke:${v('rosette')}`, 'stroke-width': 5 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 15, fill: 'none', stroke: '#2b1407', 'stroke-width': 5, 'stroke-dasharray': '1.6 1.6' }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 11.5, fill: 'none', stroke: '#f2e6c9', 'stroke-width': 1.2 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 9, fill: 'none', stroke: '#140802', 'stroke-width': 2.2 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 5.5, fill: 'none', stroke: '#f2e6c9', 'stroke-width': 1 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R, fill: 'url(#hole)' }, root);
+  // толщина деки видна на краю отверстия
+  el('path', {
+    d: `M ${HOLE_X + HOLE_R * Math.cos(0.15)},${CY + HOLE_R * Math.sin(0.15)} A ${HOLE_R} ${HOLE_R} 0 0 1 ${HOLE_X + HOLE_R * Math.cos(2.4)},${CY + HOLE_R * Math.sin(2.4)}`,
+    fill: 'none', style: `stroke:${v('top-a')}`, 'stroke-width': 3, opacity: 0.8,
+  }, root);
+  // поперечная пружина внутри корпуса, едва заметна
+  el('rect', { x: HOLE_X + 26, y: CY - 70, width: 9, height: 140, fill: '#2a170b', opacity: 0.55, 'clip-path': 'url(#holeClip)' }, root);
 
   // Подставка.
-  el('path', {
-    d: `M 1200,${CY - 70} Q 1200,${CY - 92} 1222,${CY - 92} L 1246,${CY - 92} Q 1268,${CY - 92} 1268,${CY - 70} ` +
-       `L 1268,${CY + 70} Q 1268,${CY + 92} 1246,${CY + 92} L 1222,${CY + 92} Q 1200,${CY + 92} 1200,${CY + 70} Z`,
-    fill: '#1f0f07', stroke: '#0d0502', 'stroke-width': 1.5,
-  }, root);
-  el('line', { x1: SADDLE, y1: CY - 66, x2: SADDLE, y2: CY + 66, stroke: '#efe4ca', 'stroke-width': 4, 'stroke-linecap': 'round' }, root);
+  const BRIDGE =
+    `M 1198,${CY - 64} Q 1196,${CY - 96} 1214,${CY - 98} Q 1232,${CY - 92} 1252,${CY - 98} Q 1272,${CY - 96} 1270,${CY - 64} ` +
+    `L 1270,${CY + 64} Q 1272,${CY + 96} 1252,${CY + 98} Q 1232,${CY + 92} 1214,${CY + 98} Q 1196,${CY + 96} 1198,${CY + 64} Z`;
+  el('path', { d: BRIDGE, fill: 'rgba(0,0,0,.35)', transform: 'translate(3 5)', filter: 'url(#stringShadow)' }, root);
+  el('path', { d: BRIDGE, style: `fill:${v('bridge')}`, stroke: 'rgba(0,0,0,.6)', 'stroke-width': 1.2 }, root);
+  el('path', { d: BRIDGE, fill: 'none', stroke: 'rgba(255,255,255,.12)', 'stroke-width': 1, transform: 'translate(-.6 -.8)' }, root);
+  el('rect', { x: SADDLE - 2.5, y: CY - 66, width: 5, height: 132, rx: 2.5, fill: 'url(#bone)', stroke: 'rgba(0,0,0,.35)', 'stroke-width': 0.6 }, root);
 
-  // Гриф.
-  el('polygon', { points: neckPoly(3), fill: '#c99863' }, root);
+  /* --- Гриф --- */
+  el('polygon', { points: neckPoly(3.5), style: `fill:${v('neck')}` }, root);
   el('polygon', { points: neckPoly(0), fill: 'url(#board)' }, root);
+  el('rect', { x: NUT, y: CY - 60, width: BOARD_END - NUT, height: 120, filter: 'url(#boardGrain)', 'clip-path': 'url(#boardClip)', opacity: 0.85 }, root);
+  el('polygon', { points: neckPoly(0.8), fill: 'none', style: `stroke:${v('board-binding')}`, 'stroke-width': 1.6 }, root);
 
-  // Метки ладов.
+  // Перламутровые метки.
   const markerX = n => (fretX(n - 1) + fretX(n)) / 2;
-  [3, 5, 7, 9, 15, 17].forEach(n => el('circle', { cx: markerX(n), cy: CY, r: 6, fill: '#e8dcc4', opacity: '.9' }, root));
-  [-1, 1].forEach(s => el('circle', { cx: markerX(12), cy: CY + s * 2 * spacing(markerX(12)), r: 6, fill: '#e8dcc4', opacity: '.9' }, root));
+  const dot = (x, y) => el('circle', { cx: x, cy: y, r: 5.6, fill: 'url(#pearl)', stroke: 'rgba(0,0,0,.35)', 'stroke-width': 0.6 }, root);
+  [3, 5, 7, 9, 15, 17].forEach(n => dot(markerX(n), CY));
+  [-1, 1].forEach(s => dot(markerX(12), CY + s * 2 * spacing(markerX(12))));
 
-  // Лады.
+  // Лады: металлическая проволока с тенью.
   for (let n = 1; n <= FRETS; n++) {
-    const x = fretX(n);
-    el('line', {
-      x1: x, y1: CY - neckHalf(x), x2: x, y2: CY + neckHalf(x),
-      stroke: 'url(#fret)', 'stroke-width': n < 5 ? 3.4 : 3,
-    }, root);
+    const x = fretX(n), h = neckHalf(x) + 0.5;
+    el('line', { x1: x + 2.2, y1: CY - h, x2: x + 2.2, y2: CY + h, stroke: 'rgba(0,0,0,.45)', 'stroke-width': 2 }, root);
+    el('rect', { x: x - 1.6, y: CY - h, width: 3.2, height: h * 2, rx: 1.2, fill: 'url(#fret)' }, root);
   }
 
   // Номера ладов вдоль кромки грифа.
   [3, 5, 7, 9, 12, 15].forEach(n => {
-    const t = el('text', { x: markerX(n), y: CY + neckHalf(markerX(n)) + 17, 'text-anchor': 'middle', class: 'fretnum',
-      fill: 'rgba(255,235,200,.55)', 'font-size': 12, 'font-family': 'Lora, serif' }, root);
+    const t = el('text', { x: markerX(n), y: CY + neckHalf(markerX(n)) + 18, 'text-anchor': 'middle', class: 'fretnum' }, root);
     t.textContent = n;
   });
 
-  // Порожек.
-  el('rect', { x: NUT - 4, y: CY - neckHalf(NUT), width: 8, height: neckHalf(NUT) * 2, fill: '#f1e9d6', rx: 1.5 }, root);
+  // Верхний порожек.
+  el('rect', { x: NUT - 4, y: CY - neckHalf(NUT) - 1, width: 8, height: neckHalf(NUT) * 2 + 2, rx: 1.5, fill: 'url(#bone)', stroke: 'rgba(0,0,0,.3)', 'stroke-width': 0.6 }, root);
 
-  // Голова грифа и колки.
-  el('path', { d: HEAD_PATH, fill: 'url(#head)', stroke: '#0c0603', 'stroke-width': 1.5 }, root);
-  const POST_X = [118, 78, 38, 38, 78, 118];
-  const postY = i => (i < 3 ? CY - 34 : CY + 34);
+  /* --- Голова грифа и колки --- */
+  const POST_X = [116, 78, 40, 40, 78, 116];
+  const postY = i => (i < 3 ? CY - 33 : CY + 33);
+  // ручки колков выступают за край головы
   for (let i = 0; i < 6; i++) {
-    const px = POST_X[i], top = i < 3;
-    const by = top ? CY - 82 : CY + 82;
-    el('rect', { x: px - 3, y: Math.min(postY(i), by), width: 6, height: Math.abs(by - postY(i)), fill: '#9a9a9a' }, root);
-    el('ellipse', { cx: px, cy: by + (top ? -4 : 4), rx: 11, ry: 14, fill: 'url(#chrome)', stroke: '#555', 'stroke-width': 1 }, root);
-    el('circle', { cx: px, cy: postY(i), r: 7, fill: 'url(#chrome)', stroke: '#444', 'stroke-width': 1 }, root);
+    const px = POST_X[i], s = i < 3 ? -1 : 1;
+    const edge = CY + s * 63, by = CY + s * 86;
+    el('rect', { x: px - 2.5, y: Math.min(edge, by), width: 5, height: Math.abs(by - edge), fill: 'url(#chromeBar)' }, root);
+    el('path', {
+      d: `M ${px - 9},${by} Q ${px - 12},${by + s * 16} ${px},${by + s * 19} Q ${px + 12},${by + s * 16} ${px + 9},${by} Z`,
+      fill: 'url(#chrome)', stroke: 'rgba(0,0,0,.5)', 'stroke-width': 0.8,
+    }, root);
+  }
+  el('path', { d: HEAD_PATH, fill: 'url(#headGrad)', stroke: 'rgba(0,0,0,.7)', 'stroke-width': 1.2 }, root);
+  el('path', { d: HEAD_PATH, fill: 'none', style: `stroke:${v('binding')};opacity:var(--g-head-binding)`, 'stroke-width': 2, transform: `translate(80 ${CY}) scale(.965) translate(-80 ${-CY})` }, root);
+  // блик лака
+  el('ellipse', { cx: 70, cy: CY - 30, rx: 50, ry: 10, fill: 'url(#gloss)', opacity: 0.35 }, root);
+  // золотая инкрустация
+  el('path', { d: `M 66,${CY - 11} L 80,${CY} L 66,${CY + 11} L 52,${CY} Z`, fill: 'url(#gold)', stroke: 'rgba(60,40,0,.6)', 'stroke-width': 0.6 }, root);
+  el('circle', { cx: 66, cy: CY, r: 2.4, fill: '#2a1a05' }, root);
+  // крышка анкера
+  el('path', { d: `M 136,${CY - 9} Q 120,${CY - 9} 116,${CY} Q 120,${CY + 9} 136,${CY + 9} Z`, fill: '#0b0b0b', stroke: '#777', 'stroke-width': 0.6 }, root);
+  // втулки и стойки колков
+  for (let i = 0; i < 6; i++) {
+    el('circle', { cx: POST_X[i], cy: postY(i), r: 7.5, fill: 'url(#chrome)', stroke: 'rgba(0,0,0,.6)', 'stroke-width': 0.8 }, root);
+    el('circle', { cx: POST_X[i], cy: postY(i), r: 4, fill: '#9a9a9a', stroke: '#3c3c3c', 'stroke-width': 0.8 }, root);
   }
 
-  // Струны.
+  /* --- Струны --- */
   const vibLines = [];
   const fingers = [];
   const labels = [];
-  const STRING_END_X = 1250;
+  const STRING_END_X = 1252;
+  const strColor = i => (WOUND[i] ? v('wound') : v('plain'));
+
+  // тени струн на деке и грифе
+  const sh = el('g', { filter: 'url(#stringShadow)', opacity: 0.5 }, root);
+  for (let i = 0; i < 6; i++) {
+    el('line', { x1: NUT + 3, y1: stringY(i, NUT) + 3, x2: STRING_END_X + 3, y2: stringY(i, STRING_END_X) + 6, stroke: '#000', 'stroke-width': STRING_W[i] + 0.6 }, sh);
+  }
 
   for (let i = 0; i < 6; i++) {
-    const w = STRING_W[i], c = STRING_COLOR[i];
-    // от колка до порожка
-    el('line', { x1: POST_X[i], y1: postY(i), x2: NUT, y2: stringY(i, NUT), stroke: c, 'stroke-width': w }, root);
-    // основная часть
-    el('line', { x1: NUT, y1: stringY(i, NUT), x2: SADDLE, y2: stringY(i, SADDLE), stroke: c, 'stroke-width': w }, root);
-    el('line', { x1: NUT, y1: stringY(i, NUT) - w * 0.25, x2: SADDLE, y2: stringY(i, SADDLE) - w * 0.25,
-      stroke: '#fff', 'stroke-width': Math.max(0.4, w * 0.3), opacity: '.45' }, root);
-    if (i < 4) {
-      // обмотка басовых струн
-      el('line', { x1: NUT, y1: stringY(i, NUT), x2: SADDLE, y2: stringY(i, SADDLE),
-        stroke: 'rgba(80,45,10,.35)', 'stroke-width': w, 'stroke-dasharray': '0.8 1.2' }, root);
+    const w = STRING_W[i], c = strColor(i);
+    const style = `stroke:${c}`;
+    el('line', { x1: POST_X[i], y1: postY(i), x2: NUT, y2: stringY(i, NUT), style, 'stroke-width': w }, root);
+    el('circle', { cx: POST_X[i], cy: postY(i), r: 4 + w * 0.4, fill: 'none', style, 'stroke-width': w * 0.9 }, root);
+    el('line', { x1: NUT, y1: stringY(i, NUT), x2: STRING_END_X, y2: stringY(i, STRING_END_X), style, 'stroke-width': w }, root);
+    if (WOUND[i]) {
+      el('line', { x1: NUT, y1: stringY(i, NUT), x2: STRING_END_X, y2: stringY(i, STRING_END_X), stroke: 'rgba(40,20,0,.45)', 'stroke-width': w, 'stroke-dasharray': '0.7 1' }, root);
     }
-    // от сёдла до штифта
-    el('line', { x1: SADDLE, y1: stringY(i, SADDLE), x2: STRING_END_X, y2: stringY(i, STRING_END_X), stroke: c, 'stroke-width': w }, root);
-    el('circle', { cx: STRING_END_X, cy: stringY(i, STRING_END_X), r: 4.6, fill: '#f3ebda', stroke: '#6b5a40', 'stroke-width': 0.8 }, root);
+    el('line', { x1: NUT, y1: stringY(i, NUT) - w * 0.22, x2: STRING_END_X, y2: stringY(i, STRING_END_X) - w * 0.22,
+      stroke: '#fff', 'stroke-width': Math.max(0.35, w * 0.28), opacity: 0.55 }, root);
+    // штифт подставки
+    el('circle', { cx: STRING_END_X, cy: stringY(i, STRING_END_X), r: 5.2, style: `fill:${v('pin')}`, stroke: 'rgba(0,0,0,.55)', 'stroke-width': 0.8 }, root);
+    el('circle', { cx: STRING_END_X - 0.6, cy: stringY(i, STRING_END_X) - 0.6, r: 1.7, fill: 'url(#pearl)' }, root);
 
-    // вибрирующая часть (анимируется при щипке)
-    const vib = el('line', { stroke: c, 'stroke-width': w * 1.5, opacity: 0, 'stroke-linecap': 'round' }, root);
+    const vib = el('line', { style, 'stroke-width': w * 1.5, opacity: 0, 'stroke-linecap': 'round' }, root);
     vibLines.push(vib);
   }
+
+  // Блик лака на корпусе — поверх струн, как отражение лампы.
+  const shine = el('g', { 'clip-path': 'url(#bodyClip)', style: 'opacity:var(--g-gloss)', 'pointer-events': 'none' }, root);
+  el('ellipse', { cx: 1170, cy: 112, rx: 150, ry: 34, fill: 'url(#gloss)', transform: 'rotate(-7 1170 112)', filter: 'url(#soft)' }, shine);
+  el('ellipse', { cx: 860, cy: 130, rx: 70, ry: 16, fill: 'url(#gloss)', transform: 'rotate(-12 860 130)', filter: 'url(#soft)', opacity: 0.7 }, shine);
+  el('path', { d: BODY_PATH, fill: 'none', stroke: '#fff', 'stroke-width': 1.4, opacity: 0.35, transform: 'translate(0 1.6)' }, shine);
 
   for (let i = 0; i < 6; i++) {
     const g = el('g', { class: 'finger', opacity: 0 }, root);
@@ -670,13 +749,13 @@
   function chordDiagram(frets) {
     const x0 = 9, dx = 8, y0 = 16, dy = 11;
     let s = `<svg viewBox="0 0 58 64" aria-hidden="true">`;
-    for (let i = 0; i < 6; i++) s += `<line x1="${x0 + i * dx}" y1="${y0}" x2="${x0 + i * dx}" y2="${y0 + 4 * dy}" stroke="#6b5a48" stroke-width="1"/>`;
-    for (let r = 0; r <= 4; r++) s += `<line x1="${x0}" y1="${y0 + r * dy}" x2="${x0 + 5 * dx}" y2="${y0 + r * dy}" stroke="#6b5a48" stroke-width="${r === 0 ? 3 : 1}"/>`;
+    for (let i = 0; i < 6; i++) s += `<line x1="${x0 + i * dx}" y1="${y0}" x2="${x0 + i * dx}" y2="${y0 + 4 * dy}" stroke="currentColor" stroke-opacity=".55" stroke-width="1"/>`;
+    for (let r = 0; r <= 4; r++) s += `<line x1="${x0}" y1="${y0 + r * dy}" x2="${x0 + 5 * dx}" y2="${y0 + r * dy}" stroke="currentColor" stroke-opacity="${r === 0 ? 1 : 0.55}" stroke-width="${r === 0 ? 3 : 1}"/>`;
     frets.forEach((f, i) => {
       const x = x0 + i * dx;
-      if (f < 0) s += `<text x="${x}" y="${y0 - 5}" font-size="9" text-anchor="middle" fill="#a33">×</text>`;
-      else if (f === 0) s += `<circle cx="${x}" cy="${y0 - 7}" r="2.6" fill="none" stroke="#333" stroke-width="1"/>`;
-      else s += `<circle cx="${x}" cy="${y0 + (f - 0.5) * dy}" r="3.4" fill="#2a1d14"/>`;
+      if (f < 0) s += `<text x="${x}" y="${y0 - 5}" font-size="9" text-anchor="middle" fill="currentColor" opacity=".6">×</text>`;
+      else if (f === 0) s += `<circle cx="${x}" cy="${y0 - 7}" r="2.6" fill="none" stroke="currentColor" stroke-width="1"/>`;
+      else s += `<circle cx="${x}" cy="${y0 + (f - 0.5) * dy}" r="3.4" fill="currentColor"/>`;
     });
     return s + '</svg>';
   }

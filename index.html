@@ -7,45 +7,83 @@
   <meta name="description" content="Официальный сайт музыканта: живая гитара, на которой можно сыграть самому, музыка, концерты и контакты.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Oswald:wght@400;600&family=Manrope:wght@400;600;700&family=Yeseva+One&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Вариант оформления выбирается до отрисовки, чтобы страница не «мигала».
+    (function () {
+      var looks = ['desk', 'stage', 'vintage', 'gallery'];
+      var look = 'desk';
+      try { look = localStorage.getItem('look') || look; } catch (e) {}
+      var h = location.hash.slice(1);
+      if (looks.indexOf(h) >= 0) look = h;
+      if (looks.indexOf(look) < 0) look = 'desk';
+      document.documentElement.setAttribute('data-look', look);
+    })();
+  </script>
 </head>
 <body>
 
-  <!-- ============ РАБОЧИЙ СТОЛ С ГИТАРОЙ ============ -->
-  <section class="desk" id="top">
+  <!-- ============ ГЛАВНЫЙ ЭКРАН С ГИТАРОЙ ============ -->
+  <section class="hero" id="top">
     <div class="decor" aria-hidden="true">
-      <div class="vinyl"></div>
-      <div class="mug"><span></span></div>
-      <div class="coffee-ring"></div>
-      <div class="pencil"></div>
-      <svg class="pick pick-1" viewBox="0 0 40 44"><path d="M20 43 C12 34 2 22 2 12 C2 4 10 1 20 1 C30 1 38 4 38 12 C38 22 28 34 20 43Z"/></svg>
-      <svg class="pick pick-2" viewBox="0 0 40 44"><path d="M20 43 C12 34 2 22 2 12 C2 4 10 1 20 1 C30 1 38 4 38 12 C38 22 28 34 20 43Z"/></svg>
-      <div class="paper setlist">
-        <b>Сетлист</b>
-        <ol>
-          <li>Песня номер один</li>
-          <li>Старый вальс</li>
-          <li>Дорога домой</li>
-          <li>Инструментал</li>
-          <li>На бис!</li>
-        </ol>
+      <!-- 1. Рабочий стол -->
+      <div class="only-desk">
+        <div class="vinyl"></div>
+        <div class="mug"><span></span></div>
+        <div class="coffee-ring"></div>
+        <div class="pencil"></div>
+        <svg class="pick pick-1" viewBox="0 0 40 44"><path d="M20 43 C12 34 2 22 2 12 C2 4 10 1 20 1 C30 1 38 4 38 12 C38 22 28 34 20 43Z"/></svg>
+        <svg class="pick pick-2" viewBox="0 0 40 44"><path d="M20 43 C12 34 2 22 2 12 C2 4 10 1 20 1 C30 1 38 4 38 12 C38 22 28 34 20 43Z"/></svg>
+        <div class="paper setlist">
+          <b>Сетлист</b>
+          <ol>
+            <li>Песня номер один</li>
+            <li>Старый вальс</li>
+            <li>Дорога домой</li>
+            <li>Инструментал</li>
+            <li>На бис!</li>
+          </ol>
+        </div>
+      </div>
+      <!-- 2. Сцена -->
+      <div class="only-stage">
+        <div class="beam beam-1"></div>
+        <div class="beam beam-2"></div>
+        <div class="beam beam-3"></div>
+        <div class="lamps"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="haze"></div>
+        <div class="floor"></div>
+      </div>
+      <!-- 3. Винил 70-х -->
+      <div class="only-vintage">
+        <div class="sun"></div>
+        <div class="stripes"></div>
+        <div class="sleeve"><div class="sleeve-vinyl"></div></div>
+      </div>
+      <!-- 4. Галерея -->
+      <div class="only-gallery">
+        <div class="museum-label">
+          <b>Акустическая гитара</b>
+          <span>Ель, палисандр, 19 ладов, строй E A D G B E</span>
+          <em>Экспонат можно трогать руками</em>
+        </div>
       </div>
     </div>
 
     <div class="hero-top">
-      <header class="name-card paper">
+      <header class="name-card">
         <span class="tape"></span>
         <p class="hand">музыкант · гитарист · автор песен</p>
         <h1>Имя Фамилия</h1>
-        <p class="tagline">Гитара лежит на столе — возьмите аккорд и сыграйте.</p>
+        <p class="tagline">Гитара перед вами — возьмите аккорд и сыграйте.</p>
       </header>
 
-      <nav class="stickies" aria-label="Разделы сайта">
-        <a href="#about" class="sticky s-yellow">О себе</a>
-        <a href="#music" class="sticky s-pink">Музыка</a>
-        <a href="#concerts" class="sticky s-blue">Концерты</a>
-        <a href="#contacts" class="sticky s-green">Контакты</a>
+      <nav class="menu" aria-label="Разделы сайта">
+        <a href="#about">О себе</a>
+        <a href="#music">Музыка</a>
+        <a href="#concerts">Концерты</a>
+        <a href="#contacts">Контакты</a>
       </nav>
     </div>
 
@@ -89,7 +127,7 @@
   <main>
     <section id="about" class="page">
       <div class="wrap about">
-        <div class="photo paper">
+        <div class="photo">
           <span class="tape"></span>
           <!-- Замените на настоящее фото: <img src="photo.jpg" alt="Имя Фамилия"> -->
           <div class="photo-placeholder">здесь будет фото</div>
@@ -163,6 +201,29 @@
     <p class="credits">Звук гитары: University of Iowa Electronic Music Studios, подготовка — tonejs-instruments.</p>
   </footer>
 
+  <!-- Переключатель вариантов оформления (для выбора; после выбора можно удалить) -->
+  <div class="look-switch" role="group" aria-label="Вариант оформления">
+    <span>Вариант:</span>
+    <button type="button" data-look="desk">Стол</button>
+    <button type="button" data-look="stage">Сцена</button>
+    <button type="button" data-look="vintage">Винил</button>
+    <button type="button" data-look="gallery">Галерея</button>
+  </div>
+
   <script src="guitar.js"></script>
+  <script>
+    (function () {
+      var btns = document.querySelectorAll('.look-switch button');
+      function apply(look) {
+        document.documentElement.setAttribute('data-look', look);
+        btns.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.look === look); });
+        try { localStorage.setItem('look', look); } catch (e) {}
+      }
+      btns.forEach(function (b) {
+        b.addEventListener('click', function (e) { if (e.detail) b.blur(); apply(b.dataset.look); });
+      });
+      apply(document.documentElement.getAttribute('data-look'));
+    })();
+  </script>
 </body>
 </html>
