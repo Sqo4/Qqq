@@ -1,0 +1,657 @@
+/*
+ * Интерактивная гитара.
+ * Рисуется в SVG, звук синтезируется прямо в браузере (алгоритм Карплуса — Стронга),
+ * поэтому никаких аудиофайлов не нужно.
+ */
+(() => {
+  'use strict';
+
+  /* ---------------- Музыка ---------------- */
+
+  // Строй E A D G B E (MIDI-номера открытых струн), струна 0 — шестая (басовая).
+  const OPEN_MIDI = [40, 45, 50, 55, 59, 64];
+  const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const noteName = midi => NOTE_NAMES[midi % 12];
+  const midiToFreq = midi => 440 * Math.pow(2, (midi - 69) / 12);
+
+  // Аппликатуры: от шестой струны к первой. -1 — струна заглушена, 0 — открытая.
+  const CHORDS = [
+    ['Am', [-1, 0, 2, 2, 1, 0]],
+    ['Dm', [-1, -1, 0, 2, 3, 1]],
+    ['E',  [0, 2, 2, 1, 0, 0]],
+    ['C',  [-1, 3, 2, 0, 1, 0]],
+    ['G',  [3, 2, 0, 0, 0, 3]],
+    ['F',  [1, 3, 3, 2, 1, 1]],
+    ['Em', [0, 2, 2, 0, 0, 0]],
+    ['A',  [-1, 0, 2, 2, 2, 0]],
+    ['D',  [-1, -1, 0, 2, 3, 2]],
+    ['B7', [-1, 2, 1, 2, 0, 2]],
+  ];
+  const CHORD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+  const STRING_KEYS = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH'];
+
+  const state = [0, 0, 0, 0, 0, 0];
+
+  /* ---------------- Геометрия ---------------- */
+
+  const FRETS = 19;
+  const NUT = 150;           // x порожка
+  const SCALE = 1080;        // мензура
+  const SADDLE = NUT + SCALE; // x нижнего порожка (сёдла)
+  const CY = 240;            // центр грифа по y
+
+  const fretX = n => NUT + SCALE * (1 - Math.pow(2, -n / 12));
+  const spacing = x => 15 + Math.max(0, Math.min(1, (x - NUT) / SCALE)) * 6;
+  const stringY = (i, x) => CY + (i - 2.5) * spacing(x);
+  const neckHalf = x => 2.5 * spacing(x) + 11;
+  const BOARD_END = fretX(FRETS) + 8;
+  const STRUM_X0 = BOARD_END + 2;
+  const STRUM_X1 = SADDLE - 6;
+  const LABEL_X = 1300;
+  const fingerX = f => fretX(f) - (fretX(f) - fretX(f - 1)) * 0.38;
+
+  const STRING_W = [3.4, 2.8, 2.3, 1.8, 1.3, 1.0];
+  const STRING_COLOR = ['#c99550', '#cc9a56', '#d0a05c', '#d4a662', '#e3e3e3', '#ececec'];
+
+  /* ---------------- Построение SVG ---------------- */
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('guitar');
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  const BODY_PATH =
+    `M 740,${CY} C 740,150 775,100 850,100 C 920,100 940,135 975,135 ` +
+    `C 1020,135 1060,60 1190,60 C 1300,60 1360,140 1360,${CY} ` +
+    `C 1360,340 1300,420 1190,420 C 1060,420 1020,345 975,345 ` +
+    `C 940,345 920,380 850,380 C 775,380 740,330 740,${CY} Z`;
+
+  const HEAD_PATH =
+    `M ${NUT + 2},${CY - 49} L 138,${CY - 56} C 100,${CY - 62} 44,${CY - 68} 20,${CY - 60} ` +
+    `Q 6,${CY - 40} 12,${CY} Q 6,${CY + 40} 20,${CY + 60} ` +
+    `C 44,${CY + 68} 100,${CY + 62} 138,${CY + 56} L ${NUT + 2},${CY + 49} Z`;
+
+  const neckPoly = (pad) => {
+    const x0 = NUT, x1 = BOARD_END;
+    return `${x0},${CY - neckHalf(x0) - pad} ${x1},${CY - neckHalf(x1) - pad} ` +
+           `${x1},${CY + neckHalf(x1) + pad} ${x0},${CY + neckHalf(x0) + pad}`;
+  };
+
+  el('defs', {}, svg).innerHTML = `
+    <radialGradient id="sunburst" gradientUnits="userSpaceOnUse" cx="1060" cy="${CY}" r="330">
+      <stop offset="0" stop-color="#f6cf86"/>
+      <stop offset=".45" stop-color="#e3a453"/>
+      <stop offset=".72" stop-color="#9c4a17"/>
+      <stop offset=".9" stop-color="#4a1d08"/>
+      <stop offset="1" stop-color="#220c03"/>
+    </radialGradient>
+    <radialGradient id="hole" cx=".45" cy=".4" r=".6">
+      <stop offset="0" stop-color="#2a170b"/>
+      <stop offset="1" stop-color="#050302"/>
+    </radialGradient>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b2416"/>
+      <stop offset=".5" stop-color="#26150c"/>
+      <stop offset="1" stop-color="#3b2416"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a2114"/>
+      <stop offset=".5" stop-color="#1e0f07"/>
+      <stop offset="1" stop-color="#3a2114"/>
+    </linearGradient>
+    <linearGradient id="fret" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8d8d8d"/>
+      <stop offset=".5" stop-color="#f7f7f7"/>
+      <stop offset="1" stop-color="#9a9a9a"/>
+    </linearGradient>
+    <radialGradient id="chrome" cx=".35" cy=".35" r=".7">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".5" stop-color="#bdbdbd"/>
+      <stop offset="1" stop-color="#6d6d6d"/>
+    </radialGradient>
+    <radialGradient id="fingertip" cx=".4" cy=".35" r=".7">
+      <stop offset="0" stop-color="#ffe2c4"/>
+      <stop offset=".7" stop-color="#f0a77a"/>
+      <stop offset="1" stop-color="#c36f45"/>
+    </radialGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.0025 0.09" numOctaves="3" seed="4"/>
+      <feColorMatrix values="0 0 0 0 0.25  0 0 0 0 0.12  0 0 0 0 0.03  1.7 0 0 0 -0.62"/>
+    </filter>
+    <filter id="shadow" x="-10%" y="-20%" width="120%" height="140%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <clipPath id="bodyClip"><path d="${BODY_PATH}"/></clipPath>`;
+
+  const root = el('g', { id: 'g-root' }, svg);
+
+  // Тень от гитары на столе (статичная, рисуется один раз).
+  const shadow = el('g', { transform: 'translate(10 18)', filter: 'url(#shadow)', opacity: '.55' }, root);
+  el('path', { d: BODY_PATH, fill: '#000' }, shadow);
+  el('polygon', { points: neckPoly(3), fill: '#000' }, shadow);
+  el('path', { d: HEAD_PATH, fill: '#000' }, shadow);
+
+  // Корпус.
+  el('path', { d: BODY_PATH, fill: 'url(#sunburst)' }, root);
+  el('rect', { x: 730, y: 50, width: 640, height: 380, filter: 'url(#grain)', 'clip-path': 'url(#bodyClip)', opacity: '.55' }, root);
+  el('path', { d: BODY_PATH, fill: 'none', stroke: '#f3e6cc', 'stroke-width': 5 }, root);
+  el('path', { d: BODY_PATH, fill: 'none', stroke: '#1b0b03', 'stroke-width': 1.5 }, root);
+
+  // Накладка (пикгард) под розеткой.
+  el('path', {
+    d: `M 990,${CY + 44} C 1030,${CY + 60} 1060,${CY + 100} 1050,${CY + 140} ` +
+       `C 1035,${CY + 175} 960,${CY + 165} 945,${CY + 120} C 960,${CY + 110} 985,${CY + 80} 990,${CY + 44} Z`,
+    fill: '#2a0f05', opacity: '.85',
+  }, root);
+
+  // Розетка и резонаторное отверстие.
+  const HOLE_X = 935, HOLE_R = 56;
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 16, fill: 'none', stroke: '#1d0d04', 'stroke-width': 2 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 11, fill: 'none', stroke: '#e9d6b0', 'stroke-width': 5, 'stroke-dasharray': '3 2' }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R + 6, fill: 'none', stroke: '#1d0d04', 'stroke-width': 2 }, root);
+  el('circle', { cx: HOLE_X, cy: CY, r: HOLE_R, fill: 'url(#hole)', stroke: '#140802', 'stroke-width': 2 }, root);
+
+  // Подставка.
+  el('path', {
+    d: `M 1200,${CY - 70} Q 1200,${CY - 92} 1222,${CY - 92} L 1246,${CY - 92} Q 1268,${CY - 92} 1268,${CY - 70} ` +
+       `L 1268,${CY + 70} Q 1268,${CY + 92} 1246,${CY + 92} L 1222,${CY + 92} Q 1200,${CY + 92} 1200,${CY + 70} Z`,
+    fill: '#1f0f07', stroke: '#0d0502', 'stroke-width': 1.5,
+  }, root);
+  el('line', { x1: SADDLE, y1: CY - 66, x2: SADDLE, y2: CY + 66, stroke: '#efe4ca', 'stroke-width': 4, 'stroke-linecap': 'round' }, root);
+
+  // Гриф.
+  el('polygon', { points: neckPoly(3), fill: '#c99863' }, root);
+  el('polygon', { points: neckPoly(0), fill: 'url(#board)' }, root);
+
+  // Метки ладов.
+  const markerX = n => (fretX(n - 1) + fretX(n)) / 2;
+  [3, 5, 7, 9, 15, 17].forEach(n => el('circle', { cx: markerX(n), cy: CY, r: 6, fill: '#e8dcc4', opacity: '.9' }, root));
+  [-1, 1].forEach(s => el('circle', { cx: markerX(12), cy: CY + s * 2 * spacing(markerX(12)), r: 6, fill: '#e8dcc4', opacity: '.9' }, root));
+
+  // Лады.
+  for (let n = 1; n <= FRETS; n++) {
+    const x = fretX(n);
+    el('line', {
+      x1: x, y1: CY - neckHalf(x), x2: x, y2: CY + neckHalf(x),
+      stroke: 'url(#fret)', 'stroke-width': n < 5 ? 3.4 : 3,
+    }, root);
+  }
+
+  // Номера ладов вдоль кромки грифа.
+  [3, 5, 7, 9, 12, 15].forEach(n => {
+    const t = el('text', { x: markerX(n), y: CY + neckHalf(markerX(n)) + 17, 'text-anchor': 'middle', class: 'fretnum',
+      fill: 'rgba(255,235,200,.55)', 'font-size': 12, 'font-family': 'Lora, serif' }, root);
+    t.textContent = n;
+  });
+
+  // Порожек.
+  el('rect', { x: NUT - 4, y: CY - neckHalf(NUT), width: 8, height: neckHalf(NUT) * 2, fill: '#f1e9d6', rx: 1.5 }, root);
+
+  // Голова грифа и колки.
+  el('path', { d: HEAD_PATH, fill: 'url(#head)', stroke: '#0c0603', 'stroke-width': 1.5 }, root);
+  const POST_X = [118, 78, 38, 38, 78, 118];
+  const postY = i => (i < 3 ? CY - 34 : CY + 34);
+  for (let i = 0; i < 6; i++) {
+    const px = POST_X[i], top = i < 3;
+    const by = top ? CY - 82 : CY + 82;
+    el('rect', { x: px - 3, y: Math.min(postY(i), by), width: 6, height: Math.abs(by - postY(i)), fill: '#9a9a9a' }, root);
+    el('ellipse', { cx: px, cy: by + (top ? -4 : 4), rx: 11, ry: 14, fill: 'url(#chrome)', stroke: '#555', 'stroke-width': 1 }, root);
+    el('circle', { cx: px, cy: postY(i), r: 7, fill: 'url(#chrome)', stroke: '#444', 'stroke-width': 1 }, root);
+  }
+
+  // Струны.
+  const vibLines = [];
+  const fingers = [];
+  const labels = [];
+  const STRING_END_X = 1250;
+
+  for (let i = 0; i < 6; i++) {
+    const w = STRING_W[i], c = STRING_COLOR[i];
+    // от колка до порожка
+    el('line', { x1: POST_X[i], y1: postY(i), x2: NUT, y2: stringY(i, NUT), stroke: c, 'stroke-width': w }, root);
+    // основная часть
+    el('line', { x1: NUT, y1: stringY(i, NUT), x2: SADDLE, y2: stringY(i, SADDLE), stroke: c, 'stroke-width': w }, root);
+    el('line', { x1: NUT, y1: stringY(i, NUT) - w * 0.25, x2: SADDLE, y2: stringY(i, SADDLE) - w * 0.25,
+      stroke: '#fff', 'stroke-width': Math.max(0.4, w * 0.3), opacity: '.45' }, root);
+    if (i < 4) {
+      // обмотка басовых струн
+      el('line', { x1: NUT, y1: stringY(i, NUT), x2: SADDLE, y2: stringY(i, SADDLE),
+        stroke: 'rgba(80,45,10,.35)', 'stroke-width': w, 'stroke-dasharray': '0.8 1.2' }, root);
+    }
+    // от сёдла до штифта
+    el('line', { x1: SADDLE, y1: stringY(i, SADDLE), x2: STRING_END_X, y2: stringY(i, STRING_END_X), stroke: c, 'stroke-width': w }, root);
+    el('circle', { cx: STRING_END_X, cy: stringY(i, STRING_END_X), r: 4.6, fill: '#f3ebda', stroke: '#6b5a40', 'stroke-width': 0.8 }, root);
+
+    // вибрирующая часть (анимируется при щипке)
+    const vib = el('line', { stroke: c, 'stroke-width': w * 1.5, opacity: 0, 'stroke-linecap': 'round' }, root);
+    vibLines.push(vib);
+  }
+
+  for (let i = 0; i < 6; i++) {
+    const g = el('g', { class: 'finger', opacity: 0 }, root);
+    el('circle', { r: 9.5, fill: 'url(#fingertip)', stroke: '#8a4320', 'stroke-width': 1.2 }, g);
+    fingers.push(g);
+
+    const t = el('text', { x: LABEL_X, y: stringY(i, LABEL_X) + 5, 'text-anchor': 'middle', class: 'label' }, root);
+    labels.push(t);
+  }
+
+  /* ---------------- Ориентация (вертикально на телефоне) ---------------- */
+
+  const portrait = window.matchMedia('(max-width: 720px) and (orientation: portrait)');
+  function layout() {
+    const v = portrait.matches;
+    svg.setAttribute('viewBox', v ? '0 0 480 1400' : '0 0 1400 480');
+    root.setAttribute('transform', v ? 'translate(480 0) rotate(90)' : '');
+    svg.classList.toggle('vertical', v);
+    const rot = (t) => {
+      const x = t.getAttribute('x'), y = t.getAttribute('y');
+      t.setAttribute('transform', v ? `rotate(-90 ${x} ${y})` : '');
+    };
+    labels.forEach(rot);
+    root.querySelectorAll('.fretnum').forEach(rot);
+  }
+  if (portrait.addEventListener) portrait.addEventListener('change', layout);
+  else portrait.addListener(layout);
+  layout();
+
+  /* ---------------- Звук ---------------- */
+
+  let ctx = null, master = null;
+  const voices = [null, null, null, null, null, null];
+  const bufferCache = new Map();
+
+  function ensureAudio() {
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume();
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+
+    master = ctx.createGain();
+    master.gain.value = 0.9;
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 65;
+    const body = ctx.createBiquadFilter();
+    body.type = 'peaking'; body.frequency.value = 115; body.Q.value = 1.1; body.gain.value = 4;
+    const air = ctx.createBiquadFilter();
+    air.type = 'peaking'; air.frequency.value = 2600; air.Q.value = 0.8; air.gain.value = 2;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 7500;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 4;
+
+    master.connect(hp); hp.connect(body); body.connect(air); air.connect(lp); lp.connect(comp);
+    comp.connect(ctx.destination);
+
+    // Небольшая «комната».
+    const conv = ctx.createConvolver();
+    conv.buffer = makeImpulse(1.8);
+    const wet = ctx.createGain();
+    wet.gain.value = 0.22;
+    lp.connect(conv); conv.connect(wet); wet.connect(comp);
+  }
+
+  function makeImpulse(seconds) {
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let n = 0; n < len; n++) d[n] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, 3.2);
+    }
+    return buf;
+  }
+
+  // Синтез струны: Карплус — Стронг с дробной задержкой для точного строя.
+  function stringBuffer(freq, level) {
+    const key = freq.toFixed(2) + '|' + level;
+    if (bufferCache.has(key)) return bufferCache.get(key);
+
+    const sr = ctx.sampleRate;
+    const t60 = Math.max(1.3, Math.min(4.2, 4.6 - freq / 180));
+    const len = Math.floor(sr * (t60 + 0.3));
+    const out = new Float32Array(len);
+
+    const period = sr / freq;
+    const D = period - 0.5;          // усреднение двух отсчётов добавляет полсэмпла задержки
+    const P = Math.ceil(period + 1);
+
+    // Возбуждение: отфильтрованный шум (мягче при слабом щипке) + положение щипка.
+    const alpha = [0.22, 0.42, 0.68][level];
+    let lp = 0, mean = 0;
+    for (let n = 0; n < P; n++) {
+      lp += alpha * ((Math.random() * 2 - 1) - lp);
+      out[n] = lp;
+    }
+    const pick = Math.max(1, Math.round(P * 0.17));
+    for (let n = P - 1; n >= pick; n--) out[n] -= out[n - pick];
+    for (let n = 0; n < P; n++) mean += out[n];
+    mean /= P;
+    let peak = 0;
+    for (let n = 0; n < P; n++) { out[n] -= mean; peak = Math.max(peak, Math.abs(out[n])); }
+    for (let n = 0; n < P; n++) out[n] /= peak || 1;
+
+    const g = Math.pow(10, -3 / (t60 * freq));
+    for (let n = P; n < len; n++) {
+      const x = n - D;
+      const i0 = Math.floor(x);
+      const fr = x - i0;
+      const s0 = out[i0] + (out[i0 + 1] - out[i0]) * fr;
+      const s1 = out[i0 - 1] + (out[i0] - out[i0 - 1]) * fr;
+      out[n] = g * 0.5 * (s0 + s1);
+    }
+    // плавное затухание в конце
+    const fade = Math.floor(sr * 0.05);
+    for (let k = 0; k < fade; k++) out[len - 1 - k] *= k / fade;
+
+    const buf = ctx.createBuffer(1, len, sr);
+    buf.getChannelData(0).set(out);
+    bufferCache.set(key, buf);
+    if (bufferCache.size > 90) bufferCache.delete(bufferCache.keys().next().value);
+    return buf;
+  }
+
+  function pluck(i, vel = 0.8, delay = 0) {
+    if (state[i] < 0) {
+      shake(i, 0.3, delay);
+      return;
+    }
+    ensureAudio();
+    if (ctx) {
+      const freq = midiToFreq(OPEN_MIDI[i] + state[i]);
+      const level = vel > 0.78 ? 2 : vel > 0.5 ? 1 : 0;
+      const t = ctx.currentTime + 0.01 + delay;
+
+      const src = ctx.createBufferSource();
+      src.buffer = stringBuffer(freq, level);
+      const gain = ctx.createGain();
+      gain.gain.value = 0.3 * vel;
+      src.connect(gain);
+      if (ctx.createStereoPanner) {
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = (i - 2.5) * 0.08;
+        gain.connect(pan); pan.connect(master);
+      } else {
+        gain.connect(master);
+      }
+
+      const prev = voices[i];
+      if (prev) {
+        prev.gain.gain.setTargetAtTime(0, t, 0.015);
+        try { prev.src.stop(t + 0.15); } catch (e) { /* уже остановлен */ }
+      }
+      src.start(t);
+      voices[i] = { src, gain };
+      src.onended = () => { if (voices[i] && voices[i].src === src) voices[i] = null; };
+    }
+    shake(i, vel, delay);
+  }
+
+  /* ---------------- Анимация ---------------- */
+
+  const canAnimate = typeof Element.prototype.animate === 'function';
+
+  function shake(i, vel, delay) {
+    if (!canAnimate) return;
+    const run = () => {
+      const line = vibLines[i];
+      const muted = state[i] < 0;
+      const amp = muted ? 0.8 : 1 + vel * 2.4 + (5 - i) * 0.25;
+      const steps = muted ? 4 : 18;
+      const frames = [];
+      for (let k = 0; k <= steps; k++) {
+        const a = k === steps ? 0 : amp * Math.pow(0.84, k) * (k % 2 ? -1 : 1);
+        frames.push({ transform: `translate(0px, ${a.toFixed(2)}px)`, opacity: k === steps ? 0 : 1 - (k / steps) * 0.5 });
+      }
+      line.animate(frames, { duration: muted ? 120 : 900, easing: 'linear' });
+    };
+    if (delay > 0) setTimeout(run, delay * 1000); else run();
+  }
+
+  /* ---------------- Состояние ---------------- */
+
+  function updateString(i) {
+    const f = state[i];
+    const x0 = f > 0 ? fretX(f) : NUT;
+    const vib = vibLines[i];
+    vib.setAttribute('x1', x0); vib.setAttribute('y1', stringY(i, x0));
+    vib.setAttribute('x2', SADDLE); vib.setAttribute('y2', stringY(i, SADDLE));
+
+    const g = fingers[i];
+    if (f > 0) {
+      const x = fingerX(f);
+      g.setAttribute('transform', `translate(${x.toFixed(1)} ${stringY(i, x).toFixed(1)})`);
+      g.setAttribute('opacity', 1);
+    } else {
+      g.setAttribute('opacity', 0);
+    }
+
+    const lab = labels[i];
+    lab.textContent = f < 0 ? '×' : noteName(OPEN_MIDI[i] + f);
+    lab.classList.toggle('muted', f < 0);
+  }
+
+  const chordNameEl = document.getElementById('chordName');
+  const chordNotesEl = document.getElementById('chordNotes');
+
+  function updateReadout() {
+    const idx = CHORDS.findIndex(([, s]) => s.every((v, k) => v === state[k]));
+    chordButtons.forEach((b, k) => b.classList.toggle('active', k === idx));
+    let name;
+    if (idx >= 0) name = CHORDS[idx][0];
+    else if (state.every(v => v === 0)) name = 'открытые струны';
+    else name = 'свой аккорд';
+    chordNameEl.textContent = name;
+    chordNotesEl.textContent = state.map((f, i) => (f < 0 ? '×' : noteName(OPEN_MIDI[i] + f))).join(' ');
+  }
+
+  function refresh() {
+    for (let i = 0; i < 6; i++) updateString(i);
+    updateReadout();
+  }
+
+  function setChord(frets) {
+    for (let i = 0; i < 6; i++) state[i] = frets[i];
+    refresh();
+  }
+
+  /* ---------------- Приёмы игры ---------------- */
+
+  function strum(dir = 'down', vel = 0.85, delay = 0) {
+    let order = [0, 1, 2, 3, 4, 5].filter(i => state[i] >= 0);
+    if (dir === 'up') order = order.filter(i => i >= 2).reverse();
+    const gap = dir === 'up' ? 0.011 : 0.014;
+    order.forEach((i, k) => pluck(i, vel, delay + k * gap));
+  }
+
+  function bassString() {
+    for (let i = 0; i < 3; i++) if (state[i] >= 0) return i;
+    return 3;
+  }
+
+  function arpeggio() {
+    const seq = [bassString(), 3, 4, 5, 4, 3, 2, 3];
+    seq.forEach((s, k) => pluck(s, k === 0 ? 0.85 : 0.6, k * 0.16));
+  }
+
+  function strumPattern() {
+    // ↓ ↓ ↑ ↑ ↓ ↑
+    const beat = 0.24;
+    const p = [['down', 0, 0.9], ['down', 2, 0.75], ['up', 3, 0.6], ['up', 5, 0.6], ['down', 6, 0.8], ['up', 7, 0.6]];
+    p.forEach(([d, t, v]) => strum(d, v, t * beat));
+  }
+
+  /* ---------------- Указатель: лады, струны, бой ---------------- */
+
+  function toGuitar(e) {
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(root.getScreenCTM().inverse());
+  }
+
+  const nearestString = p => {
+    const i = Math.round((p.y - CY) / spacing(p.x) + 2.5);
+    return Math.max(0, Math.min(5, i));
+  };
+
+  const fretAt = x => {
+    for (let n = 1; n <= FRETS; n++) if (x <= fretX(n)) return n;
+    return FRETS;
+  };
+
+  const inStrumZone = p => p.x >= STRUM_X0 && p.x <= STRUM_X1 && Math.abs(p.y - CY) <= neckHalf(p.x) + 20;
+  const onBoard = p => p.x > NUT + 3 && p.x < BOARD_END && Math.abs(p.y - CY) <= neckHalf(p.x) + 6;
+  const onMuteZone = p =>
+    (p.x <= NUT + 3 && p.x > NUT - 60 && Math.abs(p.y - CY) < 56) ||
+    (p.x > 1272 && p.x < 1340 && Math.abs(p.y - CY) < 80);
+
+  const strummers = new Map();
+  const lastPluck = [0, 0, 0, 0, 0, 0];
+
+  svg.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    ensureAudio();
+    const p = toGuitar(e);
+
+    if (inStrumZone(p)) {
+      e.preventDefault();
+      strummers.set(e.pointerId, { x: p.x, y: p.y, t: performance.now() });
+      try { svg.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+      const i = nearestString(p);
+      if (Math.abs(stringY(i, p.x) - p.y) < 6) {
+        lastPluck[i] = performance.now();
+        pluck(i, 0.75);
+      }
+      return;
+    }
+
+    if (onBoard(p)) {
+      e.preventDefault();
+      const i = nearestString(p);
+      const f = fretAt(p.x);
+      state[i] = state[i] === f ? 0 : f;
+      refresh();
+      pluck(i, 0.65);
+      return;
+    }
+
+    if (onMuteZone(p)) {
+      e.preventDefault();
+      const i = nearestString({ x: p.x < 700 ? NUT : LABEL_X, y: p.y });
+      state[i] = state[i] < 0 ? 0 : -1;
+      refresh();
+      if (state[i] === 0) pluck(i, 0.6);
+    }
+  });
+
+  svg.addEventListener('pointermove', e => {
+    const prev = strummers.get(e.pointerId);
+    if (!prev) return;
+    const p = toGuitar(e);
+    const now = performance.now();
+    const dt = Math.max(1, now - prev.t);
+    const speed = Math.abs(p.y - prev.y) / dt; // единиц SVG в мс
+    const vel = Math.max(0.35, Math.min(1, 0.35 + speed * 0.22));
+
+    if (p.x > STRUM_X0 - 80 && p.x < SADDLE + 30) {
+      const crossed = [];
+      for (let i = 0; i < 6; i++) {
+        const d0 = prev.y - stringY(i, prev.x);
+        const d1 = p.y - stringY(i, p.x);
+        if ((d0 < 0 && d1 >= 0) || (d0 > 0 && d1 <= 0)) crossed.push(i);
+      }
+      if (p.y < prev.y) crossed.reverse();
+      crossed.forEach((i, k) => {
+        if (now - lastPluck[i] < 35) return;
+        lastPluck[i] = now;
+        pluck(i, vel, k * 0.004);
+      });
+    }
+    strummers.set(e.pointerId, { x: p.x, y: p.y, t: now });
+  });
+
+  const endStrum = e => strummers.delete(e.pointerId);
+  svg.addEventListener('pointerup', endStrum);
+  svg.addEventListener('pointercancel', endStrum);
+  svg.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* ---------------- Кнопки аккордов ---------------- */
+
+  function chordDiagram(frets) {
+    const x0 = 9, dx = 8, y0 = 16, dy = 11;
+    let s = `<svg viewBox="0 0 58 64" aria-hidden="true">`;
+    for (let i = 0; i < 6; i++) s += `<line x1="${x0 + i * dx}" y1="${y0}" x2="${x0 + i * dx}" y2="${y0 + 4 * dy}" stroke="#6b5a48" stroke-width="1"/>`;
+    for (let r = 0; r <= 4; r++) s += `<line x1="${x0}" y1="${y0 + r * dy}" x2="${x0 + 5 * dx}" y2="${y0 + r * dy}" stroke="#6b5a48" stroke-width="${r === 0 ? 3 : 1}"/>`;
+    frets.forEach((f, i) => {
+      const x = x0 + i * dx;
+      if (f < 0) s += `<text x="${x}" y="${y0 - 5}" font-size="9" text-anchor="middle" fill="#a33">×</text>`;
+      else if (f === 0) s += `<circle cx="${x}" cy="${y0 - 7}" r="2.6" fill="none" stroke="#333" stroke-width="1"/>`;
+      else s += `<circle cx="${x}" cy="${y0 + (f - 0.5) * dy}" r="3.4" fill="#2a1d14"/>`;
+    });
+    return s + '</svg>';
+  }
+
+  const chordsEl = document.getElementById('chords');
+  const chordButtons = CHORDS.map(([name, frets], k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chord';
+    b.title = `${name} — клавиша ${CHORD_KEYS[k]}`;
+    b.innerHTML = `<span class="key">${CHORD_KEYS[k]}</span>${chordDiagram(frets)}${name}`;
+    b.addEventListener('click', e => { if (e.detail) b.blur(); setChord(frets); strum('down', 0.8); });
+    chordsEl.appendChild(b);
+    return b;
+  });
+
+  const actions = {
+    down: () => strum('down', 0.85),
+    up: () => strum('up', 0.7),
+    pattern: strumPattern,
+    arp: arpeggio,
+    clear: () => setChord([0, 0, 0, 0, 0, 0]),
+  };
+  document.querySelectorAll('[data-action]').forEach(b => {
+    b.addEventListener('click', e => { if (e.detail) b.blur(); ensureAudio(); actions[b.dataset.action](); });
+  });
+
+  /* ---------------- Клавиатура ---------------- */
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.repeat) return;
+
+    const ci = CHORD_KEYS.indexOf(e.key);
+    if (ci >= 0) { ensureAudio(); setChord(CHORDS[ci][1]); strum('down', 0.8); return; }
+
+    const si = STRING_KEYS.indexOf(e.code);
+    if (si >= 0) { pluck(si, 0.8); return; }
+
+    const deskVisible = window.scrollY < document.querySelector('.desk').offsetHeight * 0.7;
+    switch (deskVisible ? e.code : '') {
+      case 'Space':
+      case 'ArrowDown':
+        if (e.target.tagName === 'BUTTON' && e.code === 'Space') return;
+        e.preventDefault(); strum('down', 0.85); break;
+      case 'ArrowUp': e.preventDefault(); strum('up', 0.7); break;
+    }
+    switch (e.code) {
+      case 'KeyB': strumPattern(); break;
+      case 'KeyP': arpeggio(); break;
+      case 'Escape': setChord([0, 0, 0, 0, 0, 0]); break;
+    }
+  });
+
+  refresh();
+
+  const year = document.getElementById('year');
+  if (year) year.textContent = new Date().getFullYear();
+})();
