@@ -796,7 +796,8 @@
     const si = STRING_KEYS.indexOf(e.code);
     if (si >= 0) { pluck(si, 0.8); return; }
 
-    const deskVisible = window.scrollY < document.querySelector('.desk').offsetHeight * 0.7;
+    const gr = svg.getBoundingClientRect();
+    const deskVisible = gr.bottom > 0 && gr.top < window.innerHeight;
     switch (deskVisible ? e.code : '') {
       case 'Space':
       case 'ArrowDown':

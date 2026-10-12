@@ -24,8 +24,37 @@
 </head>
 <body>
 
-  <!-- ============ ГЛАВНЫЙ ЭКРАН С ГИТАРОЙ ============ -->
-  <section class="hero" id="top">
+  <!-- ============ ПЕРВЫЙ ЭКРАН: МУЗЫКАНТ ============ -->
+  <section class="intro" id="top">
+    <nav class="menu" aria-label="Разделы сайта">
+      <a href="#play">Гитара</a>
+      <a href="#about">О себе</a>
+      <a href="#music">Музыка</a>
+      <a href="#concerts">Концерты</a>
+      <a href="#contacts">Контакты</a>
+    </nav>
+
+    <div class="intro-grid">
+      <div class="portrait">
+        <span class="tape"></span>
+        <!-- Замените на фото: <img src="portrait.jpg" alt="Имя Фамилия"> -->
+        <div class="photo-placeholder">здесь будет фото</div>
+      </div>
+      <header class="name-card">
+        <span class="tape"></span>
+        <p class="hand">музыкант · гитарист · автор песен</p>
+        <h1>Имя Фамилия</h1>
+        <p class="tagline">Пара слов о себе: сколько лет на сцене, что играет, где выступает.</p>
+        <div class="cta">
+          <a href="#play" class="btn">Сыграть на гитаре ↓</a>
+          <a href="#music" class="btn ghost">Слушать музыку</a>
+        </div>
+      </header>
+    </div>
+  </section>
+
+  <!-- ============ ГИТАРА ============ -->
+  <section class="hero" id="play">
     <div class="decor" aria-hidden="true">
       <!-- 1. Рабочий стол -->
       <div class="only-desk">
@@ -71,20 +100,9 @@
       </div>
     </div>
 
-    <div class="hero-top">
-      <header class="name-card">
-        <span class="tape"></span>
-        <p class="hand">музыкант · гитарист · автор песен</p>
-        <h1>Имя Фамилия</h1>
-        <p class="tagline">Гитара перед вами — возьмите аккорд и сыграйте.</p>
-      </header>
-
-      <nav class="menu" aria-label="Разделы сайта">
-        <a href="#about">О себе</a>
-        <a href="#music">Музыка</a>
-        <a href="#concerts">Концерты</a>
-        <a href="#contacts">Контакты</a>
-      </nav>
+    <div class="play-head">
+      <h2>Сыграйте на моей гитаре</h2>
+      <p>Возьмите аккорд на карточке или зажмите лады на грифе — и проведите по струнам.</p>
     </div>
 
     <div class="guitar-wrap">
@@ -129,8 +147,8 @@
       <div class="wrap about">
         <div class="photo">
           <span class="tape"></span>
-          <!-- Замените на настоящее фото: <img src="photo.jpg" alt="Имя Фамилия"> -->
-          <div class="photo-placeholder">здесь будет фото</div>
+          <!-- Замените на фото с концерта: <img src="concert.jpg" alt="На концерте"> -->
+          <div class="photo-placeholder">фото с концерта</div>
         </div>
         <div>
           <h2>О себе</h2>
@@ -196,7 +214,7 @@
   </main>
 
   <footer>
-    <a href="#top">↑ к гитаре</a>
+    <a href="#play">↑ к гитаре</a>
     <p>© <span id="year"></span> Имя Фамилия</p>
     <p class="credits">Звук гитары: University of Iowa Electronic Music Studios, подготовка — tonejs-instruments.</p>
   </footer>

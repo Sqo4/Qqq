@@ -226,17 +226,35 @@ html[data-look="gallery"] .only-gallery { display: block; }
 .decor * { position: absolute; pointer-events: none; }
 .decor ol, .decor li, .decor b, .decor span, .decor em, .decor i { position: static; }
 
-.hero-top {
-  position: relative; z-index: 2;
-  display: flex; justify-content: center; align-items: flex-start; gap: 28px;
-  flex-wrap: wrap;
-}
 
-.name-card { position: relative; max-width: 560px; }
+/* Первый экран: портрет и имя */
+.intro {
+  position: relative;
+  padding: 20px 16px 64px;
+  color: var(--hero-fg);
+}
+.intro .menu { position: relative; z-index: 2; justify-content: flex-end; max-width: 1200px; margin: 0 auto; }
+.intro-grid {
+  position: relative; z-index: 1;
+  display: grid; grid-template-columns: minmax(220px, 380px) minmax(0, 580px);
+  justify-content: center; align-items: center; gap: 56px;
+  max-width: 1100px; margin: 36px auto 0;
+}
+.portrait { position: relative; width: 100%; max-width: 380px; justify-self: center; }
+.portrait img { display: block; }
+.portrait img, .portrait .photo-placeholder { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.btn.ghost { background: transparent; color: inherit; box-shadow: inset 0 0 0 2px currentColor; }
+
+.play-head { position: relative; z-index: 2; text-align: center; max-width: 720px; margin: 10px auto 0; }
+.play-head h2::after { margin-left: auto; margin-right: auto; }
+.play-head p { margin: 0; opacity: .8; }
+
+.name-card { position: relative; max-width: 580px; }
 .name-card h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(34px, 6vw, 56px);
+  font-size: clamp(38px, 6.5vw, 68px);
   line-height: 1.05;
   text-wrap: balance;
 }
@@ -386,7 +404,7 @@ footer .credits { font-size: 12px; opacity: .45; }
    1. СТОЛ
    ========================================================= */
 
-html[data-look="desk"] .hero {
+html[data-look="desk"] :is(.intro, .hero) {
   background-color: #6a3d20;
   background-image:
     radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255, 214, 160, .22), transparent 70%),
@@ -467,7 +485,7 @@ html[data-look="desk"] .tape {
 html[data-look="desk"] .menu { padding-top: 8px; }
 html[data-look="desk"] .menu a {
   display: grid; place-items: center;
-  width: 104px; height: 88px;
+  width: 112px; height: 88px;
   font-family: "Caveat", cursive; font-size: 26px; font-weight: 700; color: #3a2a12;
   box-shadow: 4px 8px 12px rgba(0, 0, 0, .4);
   transition: transform .2s, box-shadow .2s;
@@ -492,13 +510,18 @@ html[data-look="desk"] .actions button {
   box-shadow: 0 4px 10px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .12);
 }
 html[data-look="desk"] .photo { padding: 14px 14px 46px; transform: rotate(-2deg); }
+html[data-look="desk"] .portrait { padding: 16px 16px 56px; transform: rotate(2.5deg); }
+html[data-look="desk"] .portrait, html[data-look="desk"] .photo { background: #f6efe1; box-shadow: 0 1px 1px rgba(0,0,0,.2), 8px 16px 28px rgba(0,0,0,.45); }
+html[data-look="desk"] .menu { justify-content: center; }
+html[data-look="desk"] .menu a:nth-child(5) { background: #fbd0a0; transform: rotate(-3deg); }
+html[data-look="desk"] .name-card .btn.ghost { color: #2a1d14; }
 html[data-look="desk"] .gigs time { font-size: 30px; }
 
 /* =========================================================
    2. СЦЕНА
    ========================================================= */
 
-html[data-look="stage"] .hero {
+html[data-look="stage"] :is(.intro, .hero) {
   background:
     radial-gradient(ellipse 55% 42% at 50% 58%, rgba(255, 190, 110, .2), transparent 70%),
     radial-gradient(ellipse 120% 60% at 50% 0%, #2a1530, transparent 60%),
@@ -539,7 +562,6 @@ html[data-look="stage"] #guitar { color: #d9c9b0; }
     linear-gradient(180deg, transparent, rgba(40, 24, 14, .55));
 }
 
-html[data-look="stage"] .hero-top { justify-content: space-between; align-items: center; max-width: 1300px; margin: 0 auto; }
 html[data-look="stage"] .name-card { text-align: left; }
 html[data-look="stage"] .name-card h1 {
   font-size: clamp(38px, 7vw, 76px); font-weight: 600; text-transform: uppercase; letter-spacing: 2px;
@@ -572,6 +594,14 @@ html[data-look="stage"] .actions button {
 html[data-look="stage"] .actions button:hover { background: rgba(255, 178, 63, .14); }
 html[data-look="stage"] h2 { text-transform: uppercase; letter-spacing: 2px; font-weight: 600; }
 html[data-look="stage"] .photo { border: 1px solid var(--line); padding: 10px; }
+html[data-look="stage"] .intro {
+  background:
+    radial-gradient(ellipse 30% 70% at 30% 40%, rgba(255, 200, 120, .22), transparent 70%),
+    radial-gradient(ellipse 120% 60% at 50% 0%, #2a1530, transparent 60%),
+    linear-gradient(180deg, #0d0a12, #08070a);
+}
+html[data-look="stage"] .portrait .photo-placeholder { filter: grayscale(1); background-color: #1d1a22; }
+html[data-look="stage"] .portrait { box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 30px 90px rgba(255, 170, 60, .22); }
 html[data-look="stage"] .photo-placeholder { filter: grayscale(1); }
 html[data-look="stage"] .gigs time { text-transform: uppercase; font-size: 22px; letter-spacing: 1px; }
 html[data-look="stage"] .contacts li { border: 1px solid var(--line); box-shadow: none; }
@@ -580,7 +610,7 @@ html[data-look="stage"] .contacts li { border: 1px solid var(--line); box-shadow
    3. ВИНИЛ 70-х
    ========================================================= */
 
-html[data-look="vintage"] .hero {
+html[data-look="vintage"] :is(.intro, .hero) {
   background:
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.3  0 0 0 0 0.2  0 0 0 0 0.1  0 0 0 0.12 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
     #f2e3c4;
@@ -621,7 +651,6 @@ html[data-look="vintage"] #guitar { color: #5a3220; }
     repeating-radial-gradient(circle, #161616 0 2px, #232323 2px 3px);
 }
 
-html[data-look="vintage"] .hero-top { flex-direction: column; align-items: center; gap: 14px; }
 html[data-look="vintage"] .name-card { text-align: center; }
 html[data-look="vintage"] .name-card h1 {
   font-size: clamp(42px, 8vw, 84px); font-weight: 400; color: #3b2216;
@@ -660,6 +689,12 @@ html[data-look="vintage"] .actions button:nth-child(2n) { background: #f0b13a; c
 html[data-look="vintage"] h2 { font-weight: 400; }
 html[data-look="vintage"] h2::after { width: 120px; height: 8px; border-radius: 0; background: linear-gradient(180deg, #d0582a 0 33%, #e2832c 33% 66%, #f0b13a 66%); }
 html[data-look="vintage"] .photo { padding: 12px; background: #3b2216; border-radius: 16px; }
+html[data-look="vintage"] .portrait { max-width: 340px; border-radius: 50%; box-shadow: 0 0 0 12px #f0b13a, 0 0 0 24px #e2832c, 0 0 0 36px #d0582a, 0 0 0 48px #5a3220; margin: 48px; }
+html[data-look="vintage"] .portrait .photo-placeholder { aspect-ratio: 1; border-radius: 50%; background-color: #ead6b0; color: #5a3220; }
+html[data-look="vintage"] .menu {
+  justify-content: center; width: fit-content; max-width: 100%;
+}
+html[data-look="vintage"] .intro .menu { margin: 0 auto; }
 html[data-look="vintage"] .photo-placeholder { border-radius: 8px; color: #f2e3c4; }
 html[data-look="vintage"] .cover { border-radius: 50%; }
 html[data-look="vintage"] .contacts li { border: 2px solid #3b2216; box-shadow: 3px 3px 0 #3b2216; }
@@ -668,7 +703,7 @@ html[data-look="vintage"] .contacts li { border: 2px solid #3b2216; box-shadow: 
    4. ГАЛЕРЕЯ
    ========================================================= */
 
-html[data-look="gallery"] .hero {
+html[data-look="gallery"] :is(.intro, .hero) {
   background:
     radial-gradient(ellipse 60% 50% at 50% 55%, #fbfaf8, transparent 70%),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' seed='9'/><feColorMatrix values='0 0 0 0 0.4  0 0 0 0 0.4  0 0 0 0 0.38  0 0 0 0.08 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
@@ -686,7 +721,6 @@ html[data-look="gallery"] #guitar { color: #6b665e; }
 .decor .museum-label b { font: 600 14px "Unbounded", sans-serif; margin-bottom: 4px; }
 .decor .museum-label em { margin-top: 8px; color: #2f5d50; font-style: normal; font-weight: 700; }
 
-html[data-look="gallery"] .hero-top { justify-content: space-between; align-items: flex-end; max-width: 1300px; margin: 0 auto; }
 html[data-look="gallery"] .name-card { text-align: left; }
 html[data-look="gallery"] .name-card h1 { font-size: clamp(30px, 5vw, 54px); font-weight: 700; letter-spacing: -1px; color: #161513; }
 html[data-look="gallery"] .hand { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #2f5d50; font-weight: 700; }
@@ -716,6 +750,8 @@ html[data-look="gallery"] h2::after { width: 32px; height: 2px; }
 html[data-look="gallery"] .quote { font-size: 20px; font-weight: 600; }
 html[data-look="gallery"] .gigs time { font-family: "Unbounded", sans-serif; font-size: 18px; }
 html[data-look="gallery"] .btn { border-radius: 0; }
+html[data-look="gallery"] .portrait { box-shadow: 0 30px 60px rgba(0, 0, 0, .12); }
+html[data-look="gallery"] .portrait .photo-placeholder { background-color: #dedad3; }
 html[data-look="gallery"] .cover, html[data-look="gallery"] .contacts li { border-radius: 0; box-shadow: none; }
 
 /* ================= Адаптивность ================= */
@@ -723,14 +759,18 @@ html[data-look="gallery"] .cover, html[data-look="gallery"] .contacts li { borde
 @media (max-width: 900px) {
   .mug, .coffee-ring, .setlist, .pencil, .sleeve, .museum-label, .beam-2, .beam-3 { display: none; }
   .about { grid-template-columns: 1fr; gap: 28px; }
+  .intro-grid { grid-template-columns: 1fr; gap: 36px; justify-items: center; text-align: center; }
+  .intro .name-card { text-align: center; }
+  .intro .cta { justify-content: center; }
+  .intro .menu { justify-content: center; }
+  .portrait { max-width: 300px; }
+  html[data-look="vintage"] .portrait { max-width: 240px; }
   .photo { max-width: 300px; }
-  html[data-look="stage"] .hero-top, html[data-look="gallery"] .hero-top { justify-content: center; }
-  html[data-look="stage"] .name-card, html[data-look="gallery"] .name-card { text-align: center; }
   .sun { width: 420px; height: 420px; margin-left: -210px; top: 200px; }
 }
 
 @media (max-width: 560px) {
-  .hero { padding-top: 20px; }
+  .hero, .intro { padding-top: 20px; }
   html[data-look="desk"] .menu a { width: 74px; height: 62px; font-size: 20px; }
   html[data-look="desk"] .menu { gap: 8px; }
   html[data-look="desk"] .name-card { padding: 18px 18px 14px; }
