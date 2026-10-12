@@ -327,3 +327,4 @@ footer p { margin: 6px 0 0; font-size: 14px; opacity: .7; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
+footer .credits { font-size: 12px; opacity: .45; }

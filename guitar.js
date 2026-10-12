@@ -45,8 +45,6 @@
   const stringY = (i, x) => CY + (i - 2.5) * spacing(x);
   const neckHalf = x => 2.5 * spacing(x) + 11;
   const BOARD_END = fretX(FRETS) + 8;
-  const STRUM_X0 = BOARD_END + 2;
-  const STRUM_X1 = SADDLE - 6;
   const LABEL_X = 1300;
   const fingerX = f => fretX(f) - (fretX(f) - fretX(f - 1)) * 0.38;
 
@@ -262,42 +260,89 @@
 
   /* ---------------- Звук ---------------- */
 
+  // Основной звук — записи настоящей акустической гитары (samples.js).
+  // Пока они не загрузились, работает синтез (Карплус — Стронг).
+
   let ctx = null, master = null;
   const voices = [null, null, null, null, null, null];
   const bufferCache = new Map();
+  const samples = {};
+  const sampleKeys = [];
+
+  function decodeSamples() {
+    const data = window.GUITAR_SAMPLES;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!data || !OAC) return;
+    const dec = new OAC(1, 1, 44100);
+    Object.keys(data).forEach(k => {
+      const bin = atob(data[k]);
+      const bytes = new Uint8Array(bin.length);
+      for (let n = 0; n < bin.length; n++) bytes[n] = bin.charCodeAt(n);
+      new Promise((res, rej) => {
+        const r = dec.decodeAudioData(bytes.buffer, res, rej);
+        if (r && r.then) r.then(res, rej);
+      }).then(buf => {
+        samples[k] = { buffer: buf, offset: findOnset(buf) };
+        sampleKeys.push(+k);
+        sampleKeys.sort((x, y) => x - y);
+      }).catch(() => { /* останется синтез */ });
+    });
+  }
+
+  // Точное начало звука: пропускаем тишину и задержку mp3-кодека, чтобы нота звучала сразу.
+  function findOnset(buf) {
+    const d = buf.getChannelData(0);
+    const lim = Math.min(d.length, Math.floor(buf.sampleRate * 0.4));
+    let peak = 0;
+    for (let n = 0; n < lim; n++) peak = Math.max(peak, Math.abs(d[n]));
+    const th = peak * 0.05;
+    for (let n = 0; n < lim; n++) if (Math.abs(d[n]) > th) return Math.max(0, n - 16) / buf.sampleRate;
+    return 0;
+  }
+
+  function nearestSample(midi) {
+    if (!sampleKeys.length) return null;
+    let best = sampleKeys[0];
+    for (const k of sampleKeys) if (Math.abs(k - midi) < Math.abs(best - midi)) best = k;
+    return Math.abs(best - midi) <= 12 ? { s: samples[best], rate: Math.pow(2, (midi - best) / 12) } : null;
+  }
+
+  if (window.GUITAR_SAMPLES) decodeSamples();
+  else {
+    const sc = document.createElement('script');
+    sc.src = 'samples.js';
+    sc.async = true;
+    sc.onload = decodeSamples;
+    document.head.appendChild(sc);
+  }
 
   function ensureAudio() {
     if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state !== 'running') ctx.resume();
       return;
     }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    ctx = new AC();
+    try { ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { ctx = new AC(); }
 
     master = ctx.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = 1;
 
     const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 65;
-    const body = ctx.createBiquadFilter();
-    body.type = 'peaking'; body.frequency.value = 115; body.Q.value = 1.1; body.gain.value = 4;
-    const air = ctx.createBiquadFilter();
-    air.type = 'peaking'; air.frequency.value = 2600; air.Q.value = 0.8; air.gain.value = 2;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 7500;
+    hp.type = 'highpass'; hp.frequency.value = 60;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.ratio.value = 4;
+    comp.threshold.value = -12; comp.knee.value = 10; comp.ratio.value = 3;
+    comp.attack.value = 0.003; comp.release.value = 0.2;
 
-    master.connect(hp); hp.connect(body); body.connect(air); air.connect(lp); lp.connect(comp);
+    master.connect(hp); hp.connect(comp);
     comp.connect(ctx.destination);
 
-    // Небольшая «комната».
+    // Лёгкая «комната», чтобы звук не был сухим.
     const conv = ctx.createConvolver();
-    conv.buffer = makeImpulse(1.8);
+    conv.buffer = makeImpulse(1.4);
     const wet = ctx.createGain();
-    wet.gain.value = 0.22;
-    lp.connect(conv); conv.connect(wet); wet.connect(comp);
+    wet.gain.value = 0.1;
+    hp.connect(conv); conv.connect(wet); wet.connect(comp);
   }
 
   function makeImpulse(seconds) {
@@ -305,94 +350,109 @@
     const buf = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
-      for (let n = 0; n < len; n++) d[n] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, 3.2);
+      for (let n = 0; n < len; n++) d[n] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, 4);
     }
     return buf;
   }
 
-  // Синтез струны: Карплус — Стронг с дробной задержкой для точного строя.
-  function stringBuffer(freq, level) {
-    const key = freq.toFixed(2) + '|' + level;
+  // Запасной синтез струны: Карплус — Стронг с дробной задержкой для точного строя.
+  function stringBuffer(freq) {
+    const key = freq.toFixed(2);
     if (bufferCache.has(key)) return bufferCache.get(key);
 
     const sr = ctx.sampleRate;
     const t60 = Math.max(1.3, Math.min(4.2, 4.6 - freq / 180));
     const len = Math.floor(sr * (t60 + 0.3));
     const out = new Float32Array(len);
-
     const period = sr / freq;
-    const D = period - 0.5;          // усреднение двух отсчётов добавляет полсэмпла задержки
+    const D = period - 0.5;
     const P = Math.ceil(period + 1);
 
-    // Возбуждение: отфильтрованный шум (мягче при слабом щипке) + положение щипка.
-    const alpha = [0.22, 0.42, 0.68][level];
-    let lp = 0, mean = 0;
-    for (let n = 0; n < P; n++) {
-      lp += alpha * ((Math.random() * 2 - 1) - lp);
-      out[n] = lp;
-    }
+    let lp = 0, mean = 0, peak = 0;
+    for (let n = 0; n < P; n++) { lp += 0.5 * ((Math.random() * 2 - 1) - lp); out[n] = lp; }
     const pick = Math.max(1, Math.round(P * 0.17));
     for (let n = P - 1; n >= pick; n--) out[n] -= out[n - pick];
     for (let n = 0; n < P; n++) mean += out[n];
     mean /= P;
-    let peak = 0;
     for (let n = 0; n < P; n++) { out[n] -= mean; peak = Math.max(peak, Math.abs(out[n])); }
     for (let n = 0; n < P; n++) out[n] /= peak || 1;
 
     const g = Math.pow(10, -3 / (t60 * freq));
     for (let n = P; n < len; n++) {
-      const x = n - D;
-      const i0 = Math.floor(x);
-      const fr = x - i0;
+      const x = n - D, i0 = Math.floor(x), fr = x - i0;
       const s0 = out[i0] + (out[i0 + 1] - out[i0]) * fr;
       const s1 = out[i0 - 1] + (out[i0] - out[i0 - 1]) * fr;
       out[n] = g * 0.5 * (s0 + s1);
     }
-    // плавное затухание в конце
-    const fade = Math.floor(sr * 0.05);
-    for (let k = 0; k < fade; k++) out[len - 1 - k] *= k / fade;
-
     const buf = ctx.createBuffer(1, len, sr);
     buf.getChannelData(0).set(out);
     bufferCache.set(key, buf);
-    if (bufferCache.size > 90) bufferCache.delete(bufferCache.keys().next().value);
+    if (bufferCache.size > 60) bufferCache.delete(bufferCache.keys().next().value);
     return buf;
   }
 
+  // Заглушить звучащую струну (палец снят с лада, смена аккорда).
+  function damp(i, when) {
+    const v = voices[i];
+    if (!v || !ctx) return;
+    const t = Math.max(when || 0, ctx.currentTime);
+    v.gain.gain.cancelScheduledValues(t);
+    v.gain.gain.setTargetAtTime(0, t, 0.025);
+    try { v.src.stop(t + 0.2); } catch (e) { /* уже остановлен */ }
+    voices[i] = null;
+  }
+
   function pluck(i, vel = 0.8, delay = 0) {
-    if (state[i] < 0) {
-      shake(i, 0.3, delay);
-      return;
-    }
     ensureAudio();
-    if (ctx) {
-      const freq = midiToFreq(OPEN_MIDI[i] + state[i]);
-      const level = vel > 0.78 ? 2 : vel > 0.5 ? 1 : 0;
-      const t = ctx.currentTime + 0.01 + delay;
+    if (!ctx) { shake(i, vel, delay); return; }
 
-      const src = ctx.createBufferSource();
-      src.buffer = stringBuffer(freq, level);
-      const gain = ctx.createGain();
-      gain.gain.value = 0.3 * vel;
-      src.connect(gain);
-      if (ctx.createStereoPanner) {
-        const pan = ctx.createStereoPanner();
-        pan.pan.value = (i - 2.5) * 0.08;
-        gain.connect(pan); pan.connect(master);
-      } else {
-        gain.connect(master);
-      }
+    const muted = state[i] < 0;
+    const midi = OPEN_MIDI[i] + Math.max(0, state[i]);
+    const v = Math.max(0.1, Math.min(1, vel * (0.9 + Math.random() * 0.2))); // живая рука
+    const t = ctx.currentTime + delay;
 
-      const prev = voices[i];
-      if (prev) {
-        prev.gain.gain.setTargetAtTime(0, t, 0.015);
-        try { prev.src.stop(t + 0.15); } catch (e) { /* уже остановлен */ }
-      }
-      src.start(t);
+    const src = ctx.createBufferSource();
+    let offset = 0, level = 0.5;
+    const smp = nearestSample(midi);
+    if (smp) {
+      src.buffer = smp.s.buffer;
+      src.playbackRate.value = smp.rate;
+      offset = smp.s.offset;
+    } else {
+      src.buffer = stringBuffer(midiToFreq(midi));
+      level = 0.3;
+    }
+
+    // Чем сильнее удар, тем ярче звук.
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = muted ? 700 : 1600 + v * v * 14000;
+    tone.Q.value = 0.5;
+
+    const gain = ctx.createGain();
+    src.connect(tone); tone.connect(gain);
+    if (ctx.createStereoPanner) {
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = (i - 2.5) * 0.07;
+      gain.connect(pan); pan.connect(master);
+    } else {
+      gain.connect(master);
+    }
+
+    damp(i, t);
+    if (muted) {
+      // глухой «чик» заглушённой струны
+      gain.gain.setValueAtTime(level * v * 0.5, t);
+      gain.gain.exponentialRampToValueAtTime(0.0005, t + 0.06);
+      src.start(t, offset);
+      src.stop(t + 0.08);
+    } else {
+      gain.gain.setValueAtTime(level * (0.25 + 0.75 * v), t);
+      src.start(t, offset);
       voices[i] = { src, gain };
       src.onended = () => { if (voices[i] && voices[i].src === src) voices[i] = null; };
     }
-    shake(i, vel, delay);
+    shake(i, v, delay);
   }
 
   /* ---------------- Анимация ---------------- */
@@ -459,17 +519,25 @@
   }
 
   function setChord(frets) {
-    for (let i = 0; i < 6; i++) state[i] = frets[i];
+    for (let i = 0; i < 6; i++) {
+      if (state[i] !== frets[i]) damp(i);
+      state[i] = frets[i];
+    }
     refresh();
   }
 
   /* ---------------- Приёмы игры ---------------- */
 
   function strum(dir = 'down', vel = 0.85, delay = 0) {
-    let order = [0, 1, 2, 3, 4, 5].filter(i => state[i] >= 0);
+    let order = [0, 1, 2, 3, 4, 5];
     if (dir === 'up') order = order.filter(i => i >= 2).reverse();
-    const gap = dir === 'up' ? 0.011 : 0.014;
-    order.forEach((i, k) => pluck(i, vel, delay + k * gap));
+    const gap = dir === 'up' ? 0.009 : 0.012;
+    let t = delay;
+    order.forEach((i, k) => {
+      const accent = dir === 'down' ? 1 - k * 0.03 : 0.85 + k * 0.04;
+      pluck(i, (state[i] < 0 ? 0.5 : 1) * vel * accent, t);
+      t += gap * (0.75 + Math.random() * 0.5);
+    });
   }
 
   function bassString() {
@@ -507,27 +575,31 @@
     return FRETS;
   };
 
-  const inStrumZone = p => p.x >= STRUM_X0 && p.x <= STRUM_X1 && Math.abs(p.y - CY) <= neckHalf(p.x) + 20;
-  const onBoard = p => p.x > NUT + 3 && p.x < BOARD_END && Math.abs(p.y - CY) <= neckHalf(p.x) + 6;
+  // Играть можно по всему корпусу между грифом и подставкой.
+  const inStrumZone = p => p.x >= BOARD_END - 4 && p.x <= 1270 && Math.abs(p.y - CY) <= 175;
+  const onBoard = p => p.x > NUT + 3 && p.x < BOARD_END - 4 && Math.abs(p.y - CY) <= neckHalf(p.x) + 6;
   const onMuteZone = p =>
     (p.x <= NUT + 3 && p.x > NUT - 60 && Math.abs(p.y - CY) < 56) ||
-    (p.x > 1272 && p.x < 1340 && Math.abs(p.y - CY) < 80);
+    (p.x > 1270 && p.x < 1340 && Math.abs(p.y - CY) < 60);
 
-  const strummers = new Map();
+  const tracks = new Map();   // последняя позиция каждого указателя
+  const strummers = new Set(); // указатели, которые зажаты и играют
   const lastPluck = [0, 0, 0, 0, 0, 0];
 
   svg.addEventListener('pointerdown', e => {
     if (e.button > 0) return;
     ensureAudio();
     const p = toGuitar(e);
+    const now = performance.now();
 
     if (inStrumZone(p)) {
       e.preventDefault();
-      strummers.set(e.pointerId, { x: p.x, y: p.y, t: performance.now() });
+      strummers.add(e.pointerId);
+      tracks.set(e.pointerId, { x: p.x, y: p.y, t: now });
       try { svg.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
       const i = nearestString(p);
-      if (Math.abs(stringY(i, p.x) - p.y) < 6) {
-        lastPluck[i] = performance.now();
+      if (Math.abs(stringY(i, p.x) - p.y) < 7) {
+        lastPluck[i] = now;
         pluck(i, 0.75);
       }
       return;
@@ -537,7 +609,8 @@
       e.preventDefault();
       const i = nearestString(p);
       const f = fretAt(p.x);
-      state[i] = state[i] === f ? 0 : f;
+      if (state[i] === f) { state[i] = 0; damp(i); refresh(); return; }
+      state[i] = f;
       refresh();
       pluck(i, 0.65);
       return;
@@ -547,40 +620,49 @@
       e.preventDefault();
       const i = nearestString({ x: p.x < 700 ? NUT : LABEL_X, y: p.y });
       state[i] = state[i] < 0 ? 0 : -1;
+      if (state[i] < 0) damp(i);
       refresh();
       if (state[i] === 0) pluck(i, 0.6);
     }
   });
 
   svg.addEventListener('pointermove', e => {
-    const prev = strummers.get(e.pointerId);
-    if (!prev) return;
     const p = toGuitar(e);
     const now = performance.now();
+    const prev = tracks.get(e.pointerId);
+    tracks.set(e.pointerId, { x: p.x, y: p.y, t: now });
+    if (!prev) return;
+
+    // Зажатой кнопкой (или пальцем) — по всему корпусу; мышью без нажатия — просто проводя над корпусом.
+    const pressed = strummers.has(e.pointerId);
+    const hover = e.pointerType === 'mouse' && e.buttons === 0 && inStrumZone(p) && inStrumZone(prev);
+    if (!pressed && !hover) return;
+    if (p.x < BOARD_END - 60 || p.x > 1300) return;
+
     const dt = Math.max(1, now - prev.t);
     const speed = Math.abs(p.y - prev.y) / dt; // единиц SVG в мс
-    const vel = Math.max(0.35, Math.min(1, 0.35 + speed * 0.22));
+    const vel = Math.max(0.3, Math.min(1, 0.3 + speed * 0.3)) * (hover ? 0.85 : 1);
 
-    if (p.x > STRUM_X0 - 80 && p.x < SADDLE + 30) {
-      const crossed = [];
-      for (let i = 0; i < 6; i++) {
-        const d0 = prev.y - stringY(i, prev.x);
-        const d1 = p.y - stringY(i, p.x);
-        if ((d0 < 0 && d1 >= 0) || (d0 > 0 && d1 <= 0)) crossed.push(i);
-      }
-      if (p.y < prev.y) crossed.reverse();
-      crossed.forEach((i, k) => {
-        if (now - lastPluck[i] < 35) return;
-        lastPluck[i] = now;
-        pluck(i, vel, k * 0.004);
-      });
+    const hits = [];
+    for (let i = 0; i < 6; i++) {
+      const d0 = prev.y - stringY(i, prev.x);
+      const d1 = p.y - stringY(i, p.x);
+      if ((d0 < 0 && d1 >= 0) || (d0 > 0 && d1 <= 0)) hits.push({ i, frac: d0 / (d0 - d1) });
     }
-    strummers.set(e.pointerId, { x: p.x, y: p.y, t: now });
+    hits.sort((u, w) => u.frac - w.frac);
+    // Распределяем струны во времени так, как их на самом деле задела рука.
+    const span = Math.min(dt, 90) / 1000;
+    hits.forEach(({ i, frac }) => {
+      if (now - lastPluck[i] < 30) return;
+      lastPluck[i] = now;
+      pluck(i, vel, (frac - hits[0].frac) * span);
+    });
   });
 
-  const endStrum = e => strummers.delete(e.pointerId);
+  const endStrum = e => { strummers.delete(e.pointerId); if (e.pointerType !== 'mouse') tracks.delete(e.pointerId); };
   svg.addEventListener('pointerup', endStrum);
   svg.addEventListener('pointercancel', endStrum);
+  svg.addEventListener('pointerleave', e => { if (!strummers.has(e.pointerId)) tracks.delete(e.pointerId); });
   svg.addEventListener('contextmenu', e => e.preventDefault());
 
   /* ---------------- Кнопки аккордов ---------------- */
