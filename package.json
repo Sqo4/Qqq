@@ -1,0 +1,10 @@
+{
+  "name": "vladimir-site",
+  "private": true,
+  "description": "Сайт Владимира: главная с человечком, кейсы, обучалка по ИИ и сообщество студентов и предпринимателей",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "SEED_DEMO=1 ADMIN_TOKEN=dev-admin node --no-warnings server.js"
+  }
+}

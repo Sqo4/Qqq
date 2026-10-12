@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Модерация</title>
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+.wrap{padding:20px 20px 60px}
+.tabsrow{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+.item{display:grid;grid-template-columns:160px 160px 1fr;gap:16px;align-items:start}
+.item img{width:160px;height:200px;object-fit:cover;border:2px solid var(--ink);border-radius:10px;background:#E9E1D2}
+.item .ph{width:160px;height:200px;border:2px dashed var(--ink);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--soft);font-size:13px;text-align:center}
+.list{display:grid;gap:16px}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+@media (max-width:700px){.item{grid-template-columns:1fr 1fr}.item>div:last-child{grid-column:1/-1}.item img,.item .ph{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 style="font-size:32px">Модерация</h1>
+  <div id="root" style="margin-top:16px"></div>
+</div>
+<script>
+(() => {
+  const GOALS = { mentor: 'Готов менторить', mentee: 'Ищу ментора', team: 'Ищу команду', cofounder: 'Ищу сооснователя', internship: 'Стажировка', idea: 'Обсудить идею', network: 'Просто познакомиться' };
+  const KIND = { project: 'Проект', learn: 'Обучение', partner: 'Партнёрство', other: 'Другое' };
+  const root = document.getElementById('root');
+  const api = async (url, body) => { const r = await fetch(url, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error || 'Ошибка'); e.code = r.status; throw e; } return j; };
+  const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (v == null) continue; if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
+  const date = t => new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  let tab = 'queue';
+
+  function login(msg) {
+    const input = el('input', { type: 'password', placeholder: 'Ключ администратора', 'aria-label': 'Ключ администратора', autocomplete: 'current-password' }), err = el('p', { class: 'err', role: 'alert', text: msg || '' });
+    const f = el('form', { class: 'card', style: 'max-width:420px;display:flex;flex-direction:column;gap:12px' }, el('p', { class: 'muted', text: 'Ключ задаётся переменной окружения ADMIN_TOKEN на сервере.' }), input, err, el('button', { class: 'btn p', type: 'submit', text: 'Войти' }));
+    f.addEventListener('submit', async e => { e.preventDefault(); try { await api('/api/admin/login', { token: input.value }); load(); } catch (x) { err.textContent = x.message; } });
+    root.replaceChildren(f);
+  }
+
+  async function load() {
+    let data;
+    try {
+      data = tab === 'queue' ? await api('/api/admin/queue') : tab === 'reports' ? await api('/api/admin/reports') : await api('/api/admin/leads');
+    } catch (x) { return x.code === 401 ? login() : root.replaceChildren(el('p', { class: 'err', text: x.message })); }
+    const tabs = el('div', { class: 'tabsrow' }, [['queue', 'Проверка анкет'], ['reports', 'Жалобы'], ['leads', 'Заявки с сайта']].map(([k, t]) => el('button', { class: 'chip', type: 'button', 'aria-pressed': String(k === tab), text: t, onclick: () => { tab = k; load(); } })));
+    let body;
+    if (tab === 'queue') {
+      const stats = el('p', { class: 'muted', text: data.stats.map(s => ({ draft: 'черновики', pending: 'ждут', verified: 'проверены', rejected: 'отклонены', banned: 'заблокированы' }[s.status] + ': ' + s.n)).join(' · ') });
+      body = el('div', { class: 'list' }, stats, data.queue.length ? data.queue.map(u => {
+        const reason = el('input', { type: 'text', placeholder: 'Причина отказа (увидит пользователь)', maxlength: '300' });
+        return el('div', { class: 'card item' },
+          u.photo ? el('img', { src: u.photo, alt: 'Фото профиля' }) : el('div', { class: 'ph', text: 'нет фото' }),
+          u.doc ? el('a', { href: u.doc, target: '_blank', rel: 'noopener' }, el('img', { src: u.doc, alt: 'Селфи с документом' })) : el('div', { class: 'ph', text: 'нет документа' }),
+          el('div', {}, el('h3', { text: u.name || '—' }), el('p', { class: 'muted', text: (u.role === 'founder' ? 'Предприниматель · ' : 'Студент · ') + (u.org || '') + ' · ' + u.email }),
+            el('p', { style: 'margin-top:6px', text: (u.goals || []).map(g => GOALS[g]).join(', ') }), u.about ? el('p', { class: 'muted', style: 'margin-top:6px', text: u.about }) : null,
+            el('p', { class: 'muted', style: 'font-size:13px;margin-top:6px', text: 'Отправлено: ' + date(u.created) }),
+            el('div', { class: 'note', style: 'margin-top:10px;font-size:13px' }, 'Проверьте: лицо на фото профиля совпадает с селфи, имя в документе совпадает с анкетой. После решения документ удалится.'),
+            reason,
+            el('div', { class: 'acts' },
+              el('button', { class: 'btn p', type: 'button', text: 'Одобрить', onclick: async () => { await api('/api/admin/decide', { id: u.id, approve: true }); load(); } }),
+              el('button', { class: 'btn', type: 'button', text: 'Отклонить', onclick: async () => { await api('/api/admin/decide', { id: u.id, approve: false, reason: reason.value }); load(); } }))));
+      }) : el('p', { class: 'muted', text: 'Очередь пуста.' }));
+    } else if (tab === 'reports') {
+      body = el('div', { class: 'list' }, data.reports.length ? data.reports.map(r => el('div', { class: 'card' },
+        el('p', {}, el('b', { text: r.from_name || '—' }), ' пожаловался на ', el('b', { text: r.to_name || '—' }), ` · ${date(r.at)}`),
+        el('p', { class: 'muted', style: 'margin-top:6px', text: r.reason }),
+        el('div', { class: 'acts' },
+          el('button', { class: 'btn', type: 'button', text: 'Закрыть без мер', onclick: async () => { await api('/api/admin/resolve', { id: r.id }); load(); } }),
+          el('button', { class: 'btn p', type: 'button', text: 'Заблокировать пользователя', onclick: async () => { if (confirm('Заблокировать ' + r.to_name + '?')) { await api('/api/admin/resolve', { id: r.id, ban: true }); load(); } } })))) : el('p', { class: 'muted', text: 'Жалоб нет.' }));
+    } else {
+      body = el('div', { class: 'list' }, data.leads.length ? data.leads.map(l => el('div', { class: 'card', style: l.done ? 'opacity:.55' : '' },
+        el('p', {}, el('span', { class: 'tag', text: KIND[l.kind] || l.kind }), ' ', el('b', { text: l.name }), ' · ', l.contact, ` · ${date(l.at)}`, l.code ? el('span', { class: 'badge-ok', style: 'margin-left:8px', text: 'приз ' + l.code }) : null),
+        el('p', { style: 'margin-top:8px;white-space:pre-wrap', text: l.text }),
+        l.done ? null : el('div', { class: 'acts' }, el('button', { class: 'btn', type: 'button', text: 'Обработано', onclick: async () => { await api('/api/admin/lead-done', { id: l.id }); load(); } })))) : el('p', { class: 'muted', text: 'Заявок пока нет.' }));
+    }
+    root.replaceChildren(tabs, body);
+  }
+  load();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сообщество — знакомства студентов и предпринимателей</title>
+<meta name="description" content="Знакомства студентов и предпринимателей: ментор, команда, сооснователь или интересный собеседник. Только проверенные люди.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Golos+Text:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+body{min-height:100vh;display:flex;flex-direction:column}
+.shell{flex:1;width:100%;max-width:480px;margin:0 auto;padding:8px 18px 96px;display:flex;flex-direction:column;gap:16px}
+.screen{display:flex;flex-direction:column;gap:16px}
+.center{align-items:center;text-align:center}
+.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:2px solid var(--ink);display:flex;justify-content:center;padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+.tabs[hidden]{display:none}
+.tabs a{flex:1;max-width:120px;text-align:center;text-decoration:none;font-size:13px;font-weight:600;padding:8px 4px;border-radius:10px;min-height:44px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.tabs a[aria-current="page"]{color:var(--accent-ink)}
+.tabs svg{width:22px;height:22px}
+.steps{display:flex;gap:6px}
+.steps i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.steps i.on{background:var(--ink)}
+.avatar{width:100%;aspect-ratio:4/3;background:#E9E1D2;display:flex;align-items:center;justify-content:center;font-size:64px;font-weight:800;color:var(--soft);overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.pcard{border:2.5px solid var(--ink);border-radius:20px;background:#fff;overflow:hidden;box-shadow:4px 5px 0 var(--ink)}
+.pcard .info{padding:16px;display:flex;flex-direction:column;gap:8px}
+.pcard .photo{position:relative;border-bottom:2.5px solid var(--ink)}
+.pcard .photo .badge-ok{position:absolute;left:12px;top:12px}
+.common{font-family:var(--hand);font-size:22px;color:var(--accent-ink)}
+.acts{display:flex;justify-content:center;gap:22px;position:sticky;bottom:78px;z-index:1}
+.round{width:66px;height:66px;border-radius:50%;border:2.5px solid var(--ink);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.round.like{background:var(--accent);box-shadow:3px 3px 0 var(--ink)}
+.upl{display:flex;gap:12px}
+.upl label{flex:1;aspect-ratio:3/4;border:2.5px dashed var(--ink);border-radius:16px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:10px;cursor:pointer;overflow:hidden;position:relative;font-size:14px;font-weight:600}
+.upl label img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.upl input{position:absolute;opacity:0;width:1px;height:1px}
+.row{display:flex;gap:12px;align-items:center}
+.mrow{display:flex;gap:12px;align-items:center;text-decoration:none;padding:10px;border:2px solid var(--ink);border-radius:14px;background:#fff}
+.av{width:52px;height:52px;border-radius:50%;flex:none;border:2px solid var(--ink);overflow:hidden;background:#E9E1D2;display:flex;align-items:center;justify-content:center;font-weight:800}
+.av img{width:100%;height:100%;object-fit:cover}
+.chat{display:flex;flex-direction:column;gap:8px;min-height:50vh}
+.msg{max-width:80%;padding:9px 13px;border:2px solid var(--ink);border-radius:16px 16px 16px 4px;background:#fff;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.mine{align-self:flex-end;background:var(--marker);border-radius:16px 16px 4px 16px}
+.composer{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:2px solid var(--ink);padding:10px 18px calc(10px + env(safe-area-inset-bottom))}
+.composer form{max-width:480px;margin:0 auto;display:flex;gap:8px}
+.composer input{flex:1}
+dialog{border:2.5px solid var(--ink);border-radius:20px;padding:24px;max-width:360px;width:calc(100% - 32px);background:var(--paper);color:var(--ink)}
+dialog::backdrop{background:rgba(28,27,25,.45)}
+.hide{display:none!important}
+main:focus{outline:none}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/">Владимир</a>
+  <nav class="nav" aria-label="Разделы"><a href="/cases">кейсы</a><a href="/learn">обучалка</a><a href="/app" aria-current="page">сообщество</a></nav>
+</header>
+<main class="shell" id="view" tabindex="-1" aria-live="polite"></main>
+<nav class="tabs" id="tabs" hidden aria-label="Приложение">
+  <a href="#/feed" data-tab="feed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M9 17h6"/></svg>Знакомства</a>
+  <a href="#/matches" data-tab="matches"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg>Мэтчи</a>
+  <a href="/learn" data-tab="learn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5l10 5l-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg>Обучалка</a>
+  <a href="#/me" data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Профиль</a>
+</nav>
+<dialog id="dlg"></dialog>
+<script src="/app/app.js"></script>
+</body>
+</html>

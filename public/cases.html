@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кейсы — Владимир</title>
+<meta name="description" content="Владимир — любитель ИИ из Петербурга. Проекты: Улей, Outreach AI, LumiBot, автостатьи, софт для СПбГУ. ИИ-автоматизация для бизнеса и обучение студентов.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Golos+Text:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+.hero{display:grid;grid-template-columns:1.3fr .7fr;gap:32px;align-items:center;padding-top:28px}
+.hero p.lead{font-size:19px;color:var(--soft);max-width:560px;margin-top:16px}
+.hero .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+.fig-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.case{display:flex;flex-direction:column;gap:10px}
+.case .top-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.case h3{font-size:22px}
+.case dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:14px}
+.case dt{font-weight:700}
+.case dd{margin:0;color:var(--soft)}
+.case .ph{color:var(--accent-ink);font-style:italic}
+.svc{display:flex;flex-direction:column;gap:8px}
+.svc .n{font-family:var(--hand);font-size:30px;line-height:1;color:var(--accent-ink)}
+.plat{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.plat .card{display:flex;flex-direction:column;gap:12px}
+.plat .card .btn{align-self:flex-start;margin-top:auto}
+.contact{display:grid;grid-template-columns:.8fr 1.2fr;gap:28px;align-items:start}
+.contact form{display:flex;flex-direction:column;gap:12px}
+.ok-msg{display:none}
+.sent .ok-msg{display:block}
+.sent form{display:none}
+@media (max-width:760px){.hero,.contact{grid-template-columns:1fr}.hero .fig-wrap{display:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/">Владимир</a>
+  <nav class="nav" aria-label="Разделы">
+    <a href="/cases" aria-current="page">кейсы</a><a href="/learn">обучалка</a><a href="/app">сообщество</a><a href="#contact">связаться</a>
+  </nav>
+</header>
+
+<main>
+<div class="wrap hero">
+  <div>
+    <span class="kicker">создатель платформы</span>
+    <h1>Делаю ИИ-проекты и&nbsp;учу этому людей</h1>
+    <p class="lead">Любитель ИИ из Петербурга. Собираю ИИ-агентов и автоматизации для бизнеса, запускаю свои исследовательские проекты и обучаю студентов работать с нейросетями.</p>
+    <div class="actions">
+      <a class="btn p" href="#contact">Обсудить проект</a>
+      <a class="btn" href="#cases">Смотреть кейсы</a>
+    </div>
+  </div>
+  <div class="fig-wrap">
+    <div class="say" style="transform:rotate(-2deg)">Это мой создатель. Хвалю, потому что он меня нарисовал.</div>
+    <svg class="fig" width="150" height="190" viewBox="0 0 100 130" aria-hidden="true"><g>
+      <circle cx="50" cy="24" r="12" fill="#F6F3EC"/><path d="M45 22v1M55 22v1"/><path d="M44.5 28q5.5 5 11 0"/>
+      <path d="M50 36v42"/><path d="M50 46l-18 6l-4 14"/><path d="M50 46l18-10l6-12"/><path d="M50 78l-12 38M50 78l12 38"/>
+    </g></svg>
+  </div>
+</div>
+
+<section id="cases">
+  <div class="wrap">
+    <h2>Основные кейсы</h2>
+    <p class="muted" style="margin:8px 0 24px">Свои продукты и проекты для заказчиков. Подробности по каждому — по запросу.</p>
+    <div class="grid">
+      <article class="card case">
+        <div class="top-row"><h3>Улей</h3><span class="tag">исследование</span></div>
+        <p>Распределённая нейросеть, которая работает на видеокартах геймеров: каждый компьютер — ячейка улья.</p>
+        <dl><dt>Роль</dt><dd>автор и разработчик</dd><dt>Результат</dt><dd class="ph">[цифры: узлы, скорость, стадия]</dd></dl>
+      </article>
+      <article class="card case">
+        <div class="top-row"><h3>Outreach AI</h3><span class="tag">для бизнеса</span></div>
+        <p>ИИ-агент, который сам ищет клиентов и пишет им первые письма. Например, нашёл заказчиков для завода заборов.</p>
+        <dl><dt>Роль</dt><dd>разработчик агента</dd><dt>Результат</dt><dd class="ph">[сколько лидов / встреч / сделок]</dd></dl>
+      </article>
+      <article class="card case">
+        <div class="top-row"><h3>LumiBot</h3><span class="tag">робототехника</span></div>
+        <p>Роботы-осветители: сами ставят свет на съёмке, находят лицо и подстраивают яркость.</p>
+        <dl><dt>Роль</dt><dd>автор проекта</dd><dt>Результат</dt><dd class="ph">[стадия, где применяется]</dd></dl>
+      </article>
+      <article class="card case">
+        <div class="top-row"><h3>Автостатьи</h3><span class="tag">контент</span></div>
+        <p>Система, которая пишет и публикует статьи по расписанию: от темы до готового текста с картинками.</p>
+        <dl><dt>Роль</dt><dd>разработчик</dd><dt>Результат</dt><dd class="ph">[статей, трафик, экономия времени]</dd></dl>
+      </article>
+      <article class="card case">
+        <div class="top-row"><h3>Софт для СПбГУ</h3><span class="tag">университет</span></div>
+        <p class="ph">[Что это за программа, для какого подразделения и какую задачу решает.]</p>
+        <dl><dt>Роль</dt><dd class="ph">[ваша роль]</dd><dt>Итог</dt><dd>благодарственное письмо от СПбГУ</dd></dl>
+      </article>
+      <article class="card case">
+        <div class="top-row"><h3>Обучение студентов</h3><span class="tag">образование</span></div>
+        <p>Учу работать с нейросетями: от первых промптов до собственного MVP. Основа курса — в разделе «Обучалка».</p>
+        <dl><dt>Формат</dt><dd>занятия, менторство, практика</dd><dt>Результат</dt><dd class="ph">[сколько студентов, их проекты]</dd></dl>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Что могу сделать для вас</h2>
+    <div class="grid" style="margin-top:24px">
+      <div class="card flat svc"><span class="n">1</span><h3>ИИ-автоматизация</h3><p class="muted">Заявки, почта, отчёты, CRM — рутину забирает робот, люди занимаются делом.</p></div>
+      <div class="card flat svc"><span class="n">2</span><h3>ИИ-агенты</h3><p class="muted">Агенты для продаж, поддержки и поиска клиентов, которые работают круглосуточно.</p></div>
+      <div class="card flat svc"><span class="n">3</span><h3>Сайты и боты с ИИ</h3><p class="muted">От прототипа за неделю до продукта с защитой и нормальным деплоем.</p></div>
+      <div class="card flat svc"><span class="n">4</span><h3>Консультация и аудит</h3><p class="muted">Разберём процессы и покажем, где ИИ действительно окупится, а где — нет.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Платформа</h2>
+    <p class="muted" style="margin:8px 0 24px">Два моих продукта для студентов и предпринимателей.</p>
+    <div class="plat">
+      <div class="card">
+        <span class="kicker">3 блока · бесплатно</span>
+        <h3 style="font-size:24px">Обучалка по ИИ</h3>
+        <p class="muted">Знакомство с ИИ, как правильно с ним работать и как собрать MVP с защитой для деплоя. Человечек объясняет, вы практикуетесь.</p>
+        <a class="btn p" href="/learn">Начать учиться</a>
+      </div>
+      <div class="card">
+        <span class="kicker">только проверенные люди</span>
+        <h3 style="font-size:24px">Сообщество</h3>
+        <p class="muted">Знакомства студентов и предпринимателей: найти ментора, команду, сооснователя или просто интересного собеседника. Каждую анкету проверяет человек.</p>
+        <a class="btn" href="/app">Присоединиться</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="about">
+  <div class="wrap" style="max-width:760px">
+    <h2>Обо мне</h2>
+    <p style="margin-top:14px;font-size:18px">[Пара абзацев от первого лица: путь в ИИ, чем занимаетесь сейчас, во что верите. Можно добавить фото.]</p>
+    <h3 style="margin-top:24px">Благодарности</h3>
+    <ul style="margin:10px 0 0;padding-left:20px;display:grid;gap:6px">
+      <li>Благодарственное письмо от СПбГУ — за участие в проектах университета</li>
+      <li class="ph" style="color:var(--accent-ink)">[Благодарственное письмо от компании — за что]</li>
+      <li class="ph" style="color:var(--accent-ink)">[Ещё одно письмо — от кого и за что]</li>
+    </ul>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap contact">
+    <div>
+      <h2>Связаться</h2>
+      <p class="muted" style="margin-top:12px">Опишите задачу в двух словах — отвечу сам. Если собрали все достижения на главной, укажите код приза: консультация 20 минут бесплатно.</p>
+      <p style="margin-top:16px">Telegram: <b>[@ваш_ник]</b><br>Почта: <b>[почта]</b></p>
+    </div>
+    <div class="card" id="leadBox">
+      <form id="lead" novalidate>
+        <div class="chips" role="radiogroup" aria-label="Тема">
+          <button type="button" class="chip" data-kind="project" aria-pressed="true">Проект</button>
+          <button type="button" class="chip" data-kind="learn" aria-pressed="false">Обучение</button>
+          <button type="button" class="chip" data-kind="partner" aria-pressed="false">Партнёрство</button>
+        </div>
+        <label class="f">Как вас зовут<input type="text" name="name" autocomplete="name" required maxlength="80"></label>
+        <label class="f">Telegram или почта<input type="text" name="contact" required maxlength="120"></label>
+        <label class="f">Что нужно сделать<textarea name="text" required maxlength="2000"></textarea></label>
+        <label class="f">Код приза (если есть)<input type="text" name="code" maxlength="20" placeholder="ЧЕЛ-XXXX"></label>
+        <p class="err" id="leadErr" role="alert"></p>
+        <button class="btn p" type="submit">Отправить</button>
+      </form>
+      <div class="ok-msg" role="status">
+        <h3>Заявка отправлена</h3>
+        <p class="muted" style="margin-top:8px">Спасибо! Отвечу в ближайшее время. А пока можно поиграть с человечком на <a href="/">главной</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<footer>© Владимир · <a href="/">главная</a> · <a href="/learn">обучалка</a> · <a href="/app">сообщество</a></footer>
+
+<script>
+(() => {
+  const form = document.getElementById('lead'), box = document.getElementById('leadBox'), err = document.getElementById('leadErr');
+  let kind = new URLSearchParams(location.search).get('kind') || 'project';
+  const chips = [...form.querySelectorAll('[data-kind]')];
+  const setKind = k => { kind = k; chips.forEach(c => c.setAttribute('aria-pressed', String(c.dataset.kind === k))); };
+  chips.forEach(c => c.addEventListener('click', () => setKind(c.dataset.kind))); setKind(kind);
+  try { const code = JSON.parse(localStorage.getItem('chel:prizeCode') || 'null'); if (code) form.code.value = code; } catch (_) {}
+  form.addEventListener('submit', async e => {
+    e.preventDefault(); err.textContent = '';
+    const body = { kind, name: form.name.value, contact: form.contact.value, text: form.text.value, code: form.code.value };
+    try {
+      const r = await fetch('/api/lead', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Не получилось отправить');
+      box.classList.add('sent');
+    } catch (x) { err.textContent = x.message; }
+  });
+})();
+</script>
+</body>
+</html>

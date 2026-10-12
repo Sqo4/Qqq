@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>Человечки Владимира</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -106,7 +107,7 @@ h1 span::after{content:"";position:absolute;left:-6px;right:-6px;bottom:.08em;he
 <div class="wrap">
   <header><b>Владимир</b>
     <div class="hright">
-      <nav><a href="#projects" data-look="1">проекты</a><a href="#learn" data-look="1">обучение</a><a href="#contact" data-look="1">связаться</a></nav>
+      <nav><a href="/cases" data-look="1">кейсы</a><a href="/learn" data-look="1">обучалка</a><a href="/app" data-look="1">сообщество</a><a href="/cases#contact" data-look="1">связаться</a></nav>
       <button class="chip" id="sound" aria-pressed="false" type="button">звук: выкл</button>
       <button class="chip" id="helpBtn" type="button" aria-label="Как играть">?</button>
       <button class="chip" id="achBtn" aria-expanded="false" aria-controls="panel" type="button">★ 0/31</button>
@@ -116,7 +117,7 @@ h1 span::after{content:"";position:absolute;left:-6px;right:-6px;bottom:.08em;he
     <div class="kicker">пока вы читаете, человечек работает</div>
     <h1>Я делаю <span>ИИ-проекты</span> и учу этому людей</h1>
     <p class="lead">Любитель ИИ из Петербурга. Делаю сайты, автоматизации и ИИ-агентов для бизнеса, обучаю студентов работать с нейросетями.</p>
-    <div class="btns"><a class="btn p" id="bOrder" href="#contact">Заказать проект</a><a class="btn" id="bLearn" href="#learn">Хочу учиться</a></div>
+    <div class="btns"><a class="btn p" id="bOrder" href="/cases?kind=project#contact">Заказать проект</a><a class="btn" id="bLearn" href="/learn">Хочу учиться</a></div>
   </section>
 </div>
 <div class="panel" id="panel" hidden><h2>Достижения</h2><p class="pz" id="pz"></p><ul id="achList"></ul><button class="reset" id="achReset" type="button">сбросить достижения</button></div>
@@ -329,7 +330,7 @@ function showIntro(kind) {
   el.hidden = false;
 }
 function hideIntro() { $('intro').hidden = true; }
-$('introGo').addEventListener('click', () => { const go = $('introGo').dataset.go; hideIntro(); if (go === 'contact') location.hash = 'contact'; });
+$('introGo').addEventListener('click', () => { const go = $('introGo').dataset.go; hideIntro(); if (go === 'contact') location.href = '/cases?kind=project#contact'; });
 $('intro').addEventListener('click', e => { if (e.target === $('intro')) hideIntro(); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('intro').hidden) hideIntro(); });
 $('helpBtn').addEventListener('click', e => { e.stopPropagation(); showIntro(); });

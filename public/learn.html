@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Обучалка по ИИ — Владимир</title>
+<meta name="description" content="Бесплатная обучалка по ИИ в трёх блоках: знакомство с ИИ, как работать с нейросетями, MVP с защитой для деплоя.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Golos+Text:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+.layout{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;padding:16px 20px 60px;max-width:1080px;margin:0 auto}
+.side{flex:1 1 260px;max-width:320px;display:flex;flex-direction:column;gap:14px}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:20px}
+.progress{height:10px;border:2px solid var(--ink);border-radius:6px;background:#fff;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--ok);width:0}
+.blk h3{font-size:16px;margin:0 0 6px}
+.blk ol{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.blk a{display:flex;gap:8px;align-items:center;text-decoration:none;padding:6px 8px;border-radius:10px;font-size:15px}
+.blk a[aria-current="page"]{background:var(--marker)}
+.blk a .dot{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff}
+.blk a.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.stage{display:flex;gap:14px;align-items:flex-end}
+.board{flex:1;min-height:150px;background:#2F4A3A;border:4px solid #8A6A45;border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;font-family:var(--hand);font-size:26px;line-height:1.1;color:#F6F3EC}
+.board span:nth-child(2){color:var(--marker)}
+.lesson-body p{font-size:17px;margin-bottom:14px}
+.example{background:#fff;border:2px solid var(--ink);border-radius:12px;padding:14px 16px;font-size:15px}
+.example b{font-family:var(--hand);font-size:22px;color:var(--accent-ink);font-weight:700;display:block}
+.quiz{display:flex;flex-direction:column;gap:10px}
+.quiz button.opt{text-align:left;min-height:48px;font:400 16px var(--body);background:#fff;color:var(--ink);border:2px solid var(--ink);border-radius:12px;padding:10px 14px;cursor:pointer}
+.quiz button.opt.right{background:#DDF3E4;border-color:var(--ok)}
+.quiz button.opt.wrong{background:#FDE3DA;border-color:var(--accent-ink)}
+.quiz .fb{font-weight:600}
+.nav-row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.overview .blocks{display:grid;gap:14px}
+.overview .blocks a{display:flex;gap:14px;align-items:center;text-decoration:none;padding:16px}
+.overview .num{flex:none;width:46px;height:46px;border-radius:50%;border:2.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;background:#fff}
+.overview .done .num{background:var(--ok);border-color:var(--ok);color:#fff}
+.checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.checks span{padding:4px 10px;border-radius:999px;border:2px solid var(--line);font-size:13px}
+.checks span.on{border-color:var(--ok);background:#DDF3E4}
+main:focus{outline:none}
+.cl label{display:flex;gap:10px;align-items:flex-start;padding:6px 0;font-size:15px;cursor:pointer}
+.cl input{width:20px;height:20px;margin-top:2px;accent-color:var(--ok)}
+@media (max-width:640px){.board{font-size:22px;min-height:120px}.stage .fig{width:80px;height:110px}}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/">Владимир</a>
+  <nav class="nav" aria-label="Разделы">
+    <a href="/cases">кейсы</a><a href="/learn" aria-current="page">обучалка</a><a href="/app">сообщество</a><a href="/cases#contact">связаться</a>
+  </nav>
+</header>
+<div class="layout">
+  <aside class="side" aria-label="Содержание курса">
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px"><b>Ваш прогресс</b><span id="pct">0%</span></div>
+      <div class="progress"><i id="bar"></i></div>
+    </div>
+    <details id="tocBox" open><summary style="cursor:pointer;font-weight:700;margin-bottom:8px">Содержание</summary><div id="toc"></div></details>
+  </aside>
+  <main class="main" id="main" tabindex="-1"></main>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="teacher" viewBox="0 0 100 130"><g fill="none" stroke="#1C1B19" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="36" cy="26" r="12" fill="#F6F3EC"/><path d="M24 18h24" stroke-width="2"/><path d="M30 14l6-4l6 4z" fill="#1C1B19"/>
+      <path d="M31 25v1M41 25v1"/><path d="M32 31q4 4 8 0"/><path d="M36 38v40"/><path d="M36 48l22-14l14-12"/>
+      <path d="M72 22l24-16" stroke="#8A6A45" stroke-width="2.2"/><path d="M36 48l-14 12l-4 12"/><path d="M36 78l-12 38M36 78l12 38"/></g></symbol>
+    <symbol id="proud" viewBox="0 0 100 130"><g fill="none" stroke="#1C1B19" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="50" cy="24" r="12" fill="#F6F3EC"/><path d="M45 21q1.5-2 3 0M52 21q1.5-2 3 0"/><path d="M44 28q6 7 12 0"/>
+      <path d="M50 36v40"/><path d="M50 46l-16-16l-4-12M50 46l16-16l4-12"/><path d="M50 76l-12 38M50 76l12 38"/></g></symbol>
+  </defs>
+</svg>
+
+<script src="/learn/course.js"></script>
+<script>
+(() => {
+  const C = window.COURSE, all = C.flatMap(b => b.lessons.map(l => ({ ...l, block: b })));
+  const KEY = 'learn:done';
+  let done = new Set(); try { done = new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (_) {}
+  let signedIn = false;
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch (_) {} if (signedIn) post('/api/progress', { done: [...done] }).catch(() => {}); };
+  const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(b) }).then(r => r.json());
+  // sync with the account if the visitor is signed in to the community
+  fetch('/api/me').then(r => r.json()).then(j => { if (j.user) { signedIn = true; for (const id of j.user.progress || []) done.add(id); save(); render(); } }).catch(() => {});
+
+  const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(props)) { if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c)); return e; };
+  const fig = (id, w = 110, h = 150) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'fig'); s.setAttribute('width', w); s.setAttribute('height', h); s.setAttribute('viewBox', '0 0 100 130'); s.setAttribute('aria-hidden', 'true'); const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#' + id); s.append(u); return s; };
+  const main = document.getElementById('main');
+
+  function toc(current) {
+    const box = document.getElementById('toc'); box.replaceChildren();
+    for (const b of C) {
+      box.append(el('div', { class: 'blk' }, el('h3', { text: b.title }), el('ol', {}, b.lessons.map(l => el('li', {}, el('a', { href: '#/l/' + l.id, class: done.has(l.id) ? 'done' : '', ...(current === l.id ? { 'aria-current': 'page' } : {}) }, el('span', { class: 'dot', text: done.has(l.id) ? '✓' : '' }), l.title))))));
+    }
+    const pct = Math.round(done.size / all.length * 100);
+    document.getElementById('pct').textContent = pct + '%'; document.getElementById('bar').style.width = pct + '%';
+  }
+
+  function overview() {
+    toc(null);
+    const finished = all.every(l => done.has(l.id));
+    const next = all.find(l => !done.has(l.id));
+    main.replaceChildren(el('div', { class: 'overview', style: 'display:flex;flex-direction:column;gap:20px' },
+      el('div', { class: 'stage' }, fig(finished ? 'proud' : 'teacher', 120, 160),
+        el('div', { class: 'board' }, ...(finished ? ['Курс пройден!', 'Вы молодец', 'дальше — практика'] : ['ИИ ≠ магия', 'ИИ = инструмент', '+ ваша голова']).map(t => el('span', { text: t })))),
+      el('div', {}, el('h1', { text: 'Обучалка по ИИ' }), el('p', { class: 'muted', style: 'margin-top:10px;font-size:18px', text: 'Три блока по 15–20 минут. Человечек объясняет, вы проверяете себя и практикуетесь. Бесплатно и без регистрации.' })),
+      el('div', { class: 'blocks' }, C.map((b, i) => { const d = b.lessons.filter(l => done.has(l.id)).length, isDone = d === b.lessons.length;
+        return el('a', { class: 'card ' + (isDone ? 'done' : ''), href: '#/l/' + (b.lessons.find(l => !done.has(l.id)) || b.lessons[0]).id },
+          el('span', { class: 'num', text: isDone ? '✓' : String(i + 1) }),
+          el('span', { style: 'display:flex;flex-direction:column;gap:2px' }, el('b', { style: 'font-size:18px', text: b.title }), el('span', { class: 'muted', style: 'font-size:14px', text: b.desc }), el('span', { style: 'font-size:13px', text: `${d} из ${b.lessons.length} уроков` }))); })),
+      finished ? el('div', { class: 'card', style: 'display:flex;flex-direction:column;gap:10px' }, el('h2', { text: 'Что дальше?' }), el('p', { class: 'muted', text: 'Найдите единомышленников, чтобы собрать свой MVP вместе, или обсудите проект со мной.' }), el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' }, el('a', { class: 'btn p', href: '/app', text: 'В сообщество' }), el('a', { class: 'btn', href: '/cases?kind=learn#contact', text: 'Написать Владимиру' })))
+        : el('a', { class: 'btn p', href: '#/l/' + next.id, style: 'align-self:flex-start', text: done.size ? 'Продолжить' : 'Начать первый урок' })
+    ));
+  }
+
+  function lesson(id) {
+    const i = all.findIndex(l => l.id === id); if (i < 0) return overview();
+    const l = all[i], prev = all[i - 1], next = all[i + 1]; toc(id);
+    const bi = l.block.lessons.findIndex(x => x.id === l.id) + 1;
+    const fb = el('p', { class: 'fb', role: 'status' });
+    const nextBtn = el('a', { class: 'btn p', href: next ? '#/l/' + next.id : '#/', text: next ? 'Следующий урок →' : 'Завершить курс' });
+    const opts = l.quiz.options.map((o, k) => el('button', { type: 'button', class: 'opt', text: o, onclick: e => {
+      const right = k === l.quiz.correct; e.currentTarget.classList.add(right ? 'right' : 'wrong');
+      if (right) { opts[l.quiz.correct].classList.add('right'); fb.textContent = l.quiz.explain; fb.style.color = 'var(--ok)'; done.add(l.id); save(); toc(id); }
+      else { fb.textContent = 'Не совсем. Подумайте ещё — подсказка в тексте урока.'; fb.style.color = 'var(--accent-ink)'; }
+    } }));
+    let practice = null;
+    if (l.practice && l.practice.checks) {
+      const ta = el('textarea', { rows: '5', placeholder: l.practice.placeholder, 'aria-label': l.practice.label });
+      const marks = l.practice.checks.map(([name]) => el('span', { text: name }));
+      ta.addEventListener('input', () => l.practice.checks.forEach(([, re], k) => marks[k].classList.toggle('on', re.test(ta.value))));
+      practice = el('div', { class: 'card flat' }, el('h3', { text: l.practice.label }), el('p', { class: 'muted', style: 'font-size:14px;margin:6px 0 10px', text: 'Пишите прямо здесь — человечек подсветит, какие части промпта уже есть.' }), ta, el('div', { class: 'checks' }, marks));
+    } else if (l.practice && l.practice.checklist) {
+      practice = el('div', { class: 'card flat cl' }, el('h3', { text: l.practice.label }), l.practice.checklist.map(t => el('label', {}, el('input', { type: 'checkbox' }), t)));
+    }
+    main.replaceChildren(...[
+      el('div', { class: 'muted', style: 'font-size:14px', text: `${l.block.title} · урок ${bi} из ${l.block.lessons.length} · ${l.min} мин` }),
+      el('div', { class: 'stage' }, fig('teacher'), el('div', { class: 'board' }, l.board.map(t => el('span', { text: t })))),
+      el('h1', { style: 'font-size:clamp(28px,4vw,40px)', text: l.title }),
+      el('div', { class: 'say', style: 'transform:rotate(-0.6deg);max-width:560px' }, l.say),
+      el('div', { class: 'lesson-body' }, l.body.map(p => el('p', { text: p }))),
+      el('div', { class: 'example' }, el('b', { text: 'пример' }), l.example),
+      practice,
+      el('div', { class: 'card quiz' }, el('h3', { text: 'Проверьте себя' }), el('p', { text: l.quiz.q }), opts, fb),
+      el('div', { class: 'nav-row' }, prev ? el('a', { class: 'btn ghost', href: '#/l/' + prev.id, text: '← Назад' }) : el('a', { class: 'btn ghost', href: '#/', text: '← К блокам' }), nextBtn)
+    ].filter(Boolean));
+    main.focus({ preventScroll: true }); scrollTo({ top: 0 });
+  }
+
+  if (matchMedia('(max-width: 640px)').matches) document.getElementById('tocBox').removeAttribute('open');
+  function render() { const m = /^#\/l\/([a-z0-9-]+)$/.exec(location.hash); if (m) lesson(m[1]); else overview(); }
+  addEventListener('hashchange', render); render();
+})();
+</script>
+</body>
+</html>
