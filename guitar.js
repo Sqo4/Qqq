@@ -339,33 +339,49 @@
 
   /* ---------------- Звук ---------------- */
 
-  // Основной звук — записи настоящей акустической гитары (samples.js).
-  // Пока они не загрузились, работает синтез (Карплус — Стронг).
+  // Звучат записи настоящих гитар. Наборов несколько, их можно переключать и сравнивать.
+  // Пока набор не загрузился, играет синтез (Карплус — Стронг).
+  const SOUND_BANKS = {
+    iowa:  { title: 'Звук 1', script: 'samples.js' },
+    lk:    { title: 'Звук 2', script: 'sounds/lk.js' },
+    fluid: { title: 'Звук 3', script: 'sounds/fluid.js' },
+    sf2:   { title: 'Звук 4', script: 'sounds/sf2.js' },
+  };
+  let currentBank = 'iowa';
+  try { if (SOUND_BANKS[localStorage.getItem('sound')]) currentBank = localStorage.getItem('sound'); } catch (e) { /* без памяти */ }
 
   let ctx = null, master = null;
   const voices = [null, null, null, null, null, null];
   const bufferCache = new Map();
-  const samples = {};
-  const sampleKeys = [];
+  const banks = {}; // имя -> Promise со списком зон { low, high, root, buffer, offset, norm, loop }
 
-  function decodeSamples() {
-    const data = window.GUITAR_SAMPLES;
-    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    if (!data || !OAC) return;
-    const dec = new OAC(1, 1, 44100);
-    Object.keys(data).forEach(k => {
-      const bin = atob(data[k]);
-      const bytes = new Uint8Array(bin.length);
-      for (let n = 0; n < bin.length; n++) bytes[n] = bin.charCodeAt(n);
-      new Promise((res, rej) => {
-        const r = dec.decodeAudioData(bytes.buffer, res, rej);
-        if (r && r.then) r.then(res, rej);
-      }).then(buf => {
-        samples[k] = { buffer: buf, offset: findOnset(buf) };
-        sampleKeys.push(+k);
-        sampleKeys.sort((x, y) => x - y);
-      }).catch(() => { /* останется синтез */ });
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const decoder = OAC ? new OAC(1, 1, 44100) : null;
+
+  function b64bytes(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let n = 0; n < bin.length; n++) bytes[n] = bin.charCodeAt(n);
+    return bytes;
+  }
+
+  function decodeMp3(b64) {
+    return new Promise((res, rej) => {
+      const r = decoder.decodeAudioData(b64bytes(b64).buffer, res, rej);
+      if (r && r.then) r.then(res, rej);
     });
+  }
+
+  function decodePcm(b64, rate) {
+    const bytes = b64bytes(b64);
+    const buf = decoder.createBuffer(1, bytes.length >> 1, rate);
+    const d = buf.getChannelData(0);
+    for (let n = 0; n < d.length; n++) {
+      let v = bytes[2 * n] + bytes[2 * n + 1] * 256;
+      if (v >= 32768) v -= 65536;
+      d[n] = v / 32768;
+    }
+    return Promise.resolve(buf);
   }
 
   // Точное начало звука: пропускаем тишину и задержку mp3-кодека, чтобы нота звучала сразу.
@@ -379,20 +395,68 @@
     return 0;
   }
 
-  function nearestSample(midi) {
-    if (!sampleKeys.length) return null;
-    let best = sampleKeys[0];
-    for (const k of sampleKeys) if (Math.abs(k - midi) < Math.abs(best - midi)) best = k;
-    return Math.abs(best - midi) <= 12 ? { s: samples[best], rate: Math.pow(2, (midi - best) / 12) } : null;
+  function finishZone(z, buf) {
+    const d = buf.getChannelData(0);
+    let peak = 0;
+    for (let n = 0; n < d.length; n += 4) peak = Math.max(peak, Math.abs(d[n]));
+    z.buffer = buf;
+    z.offset = findOnset(buf);
+    z.norm = Math.min(4, 0.85 / (peak || 1)); // выравниваем громкость наборов
+    return z;
   }
 
-  if (window.GUITAR_SAMPLES) decodeSamples();
-  else {
-    const sc = document.createElement('script');
-    sc.src = 'samples.js';
-    sc.async = true;
-    sc.onload = decodeSamples;
-    document.head.appendChild(sc);
+  function decodeBank(name) {
+    if (name === 'iowa') {
+      const data = window.GUITAR_SAMPLES;
+      return Promise.all(Object.keys(data).map(k =>
+        decodeMp3(data[k]).then(buf => finishZone({ low: +k, high: +k, root: +k * 100 }, buf))));
+    }
+    const preset = (window.GUITAR_SOUNDS || {})[name];
+    return Promise.all(preset.zones.map(zn => {
+      const z = {
+        low: zn.keyRangeLow, high: zn.keyRangeHigh,
+        root: zn.originalPitch - 100 * (zn.coarseTune || 0) - (zn.fineTune || 0),
+        loop: zn.loopStart > 1 && zn.loopEnd > zn.loopStart ? [zn.loopStart / zn.sampleRate, zn.loopEnd / zn.sampleRate] : null,
+      };
+      return (zn.file ? decodeMp3(zn.file) : decodePcm(zn.sample, zn.sampleRate)).then(buf => finishZone(z, buf));
+    }));
+  }
+
+  function loadBank(name) {
+    if (banks[name]) return banks[name];
+    const info = SOUND_BANKS[name];
+    const present = name === 'iowa' ? window.GUITAR_SAMPLES : (window.GUITAR_SOUNDS || {})[name];
+    const script = present ? Promise.resolve() : new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = info.script;
+      sc.async = true;
+      sc.onload = res;
+      sc.onerror = rej;
+      document.head.appendChild(sc);
+    });
+    banks[name] = script.then(() => decodeBank(name)).then(zones => {
+      banks[name].zones = zones;
+      return zones;
+    });
+    banks[name].catch(() => { delete banks[name]; });
+    return banks[name];
+  }
+
+  function zoneFor(midi) {
+    const b = banks[currentBank] && banks[currentBank].zones ? banks[currentBank] : banks.iowa;
+    const zones = b && b.zones;
+    if (!zones || !zones.length) return null;
+    let best = null, dist = Infinity;
+    for (const z of zones) {
+      const d = midi < z.low ? z.low - midi : midi > z.high ? midi - z.high : 0;
+      if (d < dist || (d === dist && Math.abs(z.root / 100 - midi) < Math.abs(best.root / 100 - midi))) { best = z; dist = d; }
+    }
+    return best;
+  }
+
+  if (decoder) {
+    loadBank('iowa');
+    if (currentBank !== 'iowa') loadBank(currentBank);
   }
 
   function ensureAudio() {
@@ -492,11 +556,17 @@
 
     const src = ctx.createBufferSource();
     let offset = 0, level = 0.5;
-    const smp = nearestSample(midi);
-    if (smp) {
-      src.buffer = smp.s.buffer;
-      src.playbackRate.value = smp.rate;
-      offset = smp.s.offset;
+    const zone = zoneFor(midi);
+    if (zone) {
+      src.buffer = zone.buffer;
+      src.playbackRate.value = Math.pow(2, (midi * 100 - zone.root) / 1200);
+      offset = zone.offset;
+      level = 0.5 * zone.norm;
+      if (zone.loop) {
+        src.loop = true;
+        src.loopStart = zone.loop[0];
+        src.loopEnd = zone.loop[1];
+      }
     } else {
       src.buffer = stringBuffer(midiToFreq(midi));
       level = 0.3;
@@ -528,6 +598,12 @@
     } else {
       gain.gain.setValueAtTime(level * (0.25 + 0.75 * v), t);
       src.start(t, offset);
+      if (src.loop) {
+        // у зацикленных записей затухание задаём сами, как у настоящей струны
+        const t60 = Math.max(1.5, 5 - midi / 30);
+        gain.gain.setTargetAtTime(0, t + 0.05, t60 / 6.9);
+        src.stop(t + t60 + 0.2);
+      }
       voices[i] = { src, gain };
       src.onended = () => { if (voices[i] && voices[i].src === src) voices[i] = null; };
     }
@@ -771,6 +847,29 @@
     chordsEl.appendChild(b);
     return b;
   });
+
+  const soundEl = document.getElementById('sounds');
+  if (soundEl) {
+    const soundButtons = Object.keys(SOUND_BANKS).map(name => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = SOUND_BANKS[name].title;
+      b.addEventListener('click', e => {
+        if (e.detail) b.blur();
+        currentBank = name;
+        try { localStorage.setItem('sound', name); } catch (err) { /* без памяти */ }
+        markSound();
+        ensureAudio();
+        b.classList.add('loading');
+        loadBank(name).then(() => { b.classList.remove('loading'); if (currentBank === name) strum('down', 0.8); },
+                            () => { b.classList.remove('loading'); });
+      });
+      soundEl.appendChild(b);
+      return [name, b];
+    });
+    const markSound = () => soundButtons.forEach(([n, b]) => b.setAttribute('aria-pressed', n === currentBank));
+    markSound();
+  }
 
   const actions = {
     down: () => strum('down', 0.85),

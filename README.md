@@ -18,6 +18,16 @@
 по ссылке с якорем: `index.html#stage`, `#vintage`, `#gallery`, `#desk`. Когда вариант выбран, переключатель
 (блок `look-switch` в `index.html`) можно удалить, а нужный вариант вписать в начальный скрипт.
 
+## Звук
+Под кнопками есть переключатель «Звук 1–4»:
+1. Записи University of Iowa (по записи на каждый полутон), `samples.js`.
+2. LK Acoustic Steel, набор под стальную акустику, `sounds/lk.js`.
+3. FluidR3 GM, Steel Guitar, `sounds/fluid.js`.
+4. Acoustic Guitar SF2, `sounds/sf2.js`.
+
+Наборы 2–4 взяты из [WebAudioFont](https://github.com/surikov/webaudiofontdata) (MIT) и грузятся только
+при выборе. Когда выберете лучший, лишние файлы и кнопки можно удалить.
+
 ## Файлы
 - `index.html` — разметка и тексты. Первый экран — портрет и имя музыканта, ниже гитара, затем «О себе»,
   музыка, концерты, контакты (замените заглушки и вставьте фото вместо `photo-placeholder`).

@@ -311,6 +311,19 @@ html[data-look="gallery"] .only-gallery { display: block; }
 }
 .actions button:active { transform: translateY(1px); }
 
+.sounds { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; }
+.sounds > span { opacity: .75; }
+#sounds { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+#sounds button {
+  padding: 6px 14px; border-radius: 20px; cursor: pointer;
+  border: 1px solid currentColor; background: transparent; color: inherit;
+  font: 600 14px var(--font-body); opacity: .75;
+}
+#sounds button:hover { opacity: 1; }
+#sounds button[aria-pressed="true"] { opacity: 1; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+#sounds button.loading { animation: pulse .8s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .35; } }
+
 .help {
   display: inline-block; max-width: 720px;
   margin-top: 16px; text-align: left;
