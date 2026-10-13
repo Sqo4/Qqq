@@ -843,7 +843,7 @@
     b.className = 'chord';
     b.title = `${name} — клавиша ${CHORD_KEYS[k]}`;
     b.innerHTML = `<span class="key">${CHORD_KEYS[k]}</span>${chordDiagram(frets)}${name}`;
-    b.addEventListener('click', e => { if (e.detail) b.blur(); setChord(frets); strum('down', 0.8); });
+    b.addEventListener('click', e => { if (e.detail) b.blur(); ensureAudio(); setChord(frets); });
     chordsEl.appendChild(b);
     return b;
   });
@@ -890,7 +890,7 @@
     if (e.repeat) return;
 
     const ci = CHORD_KEYS.indexOf(e.key);
-    if (ci >= 0) { ensureAudio(); setChord(CHORDS[ci][1]); strum('down', 0.8); return; }
+    if (ci >= 0) { ensureAudio(); setChord(CHORDS[ci][1]); return; }
 
     const si = STRING_KEYS.indexOf(e.code);
     if (si >= 0) { pluck(si, 0.8); return; }
