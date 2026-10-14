@@ -30,6 +30,7 @@
       <a href="#play">Гитара</a>
       <a href="#about">О себе</a>
       <a href="#music">Музыка</a>
+      <a href="#order">На заказ</a>
       <a href="#concerts">Концерты</a>
       <a href="#contacts">Контакты</a>
     </nav>
@@ -194,7 +195,85 @@
       </div>
     </section>
 
-    <section id="concerts" class="page">
+    <section id="order" class="page order">
+      <div class="wrap">
+        <h2>Стихи и песни на заказ</h2>
+        <p class="lead">Напишу стихи или песню о вашем человеке и вашей истории — к празднику, на память или просто так.
+          Не шаблон из интернета, а слова, которые подходят только вам.</p>
+
+        <ul class="occasions" aria-label="Поводы">
+          <li>Свадьба</li><li>Юбилей</li><li>День рождения</li><li>Годовщина</li>
+          <li>Признание в любви</li><li>Родителям</li><li>Выпускной</li><li>Коллегам и руководителю</li>
+        </ul>
+
+        <div class="offers">
+          <article class="offer">
+            <h3>Стихотворение</h3>
+            <p>Именное стихотворение по вашему рассказу: 4–6 четверостиший. Красиво оформлю для открытки или рамки.</p>
+            <p class="price">от 0 000 ₽</p>
+            <p class="term">2–3 дня</p>
+          </article>
+          <article class="offer featured">
+            <h3>Песня</h3>
+            <p>Песня с вашими именами и историями: текст, мелодия и запись под гитару. Можно поставить на празднике.</p>
+            <p class="price">от 00 000 ₽</p>
+            <p class="term">1–2 недели</p>
+          </article>
+          <article class="offer">
+            <h3>Песня вживую</h3>
+            <p>Исполню заказанную песню на вашем празднике — сюрприз для виновника торжества и гостей.</p>
+            <p class="price">по договорённости</p>
+            <p class="term">заранее обсудим дату</p>
+          </article>
+        </div>
+
+        <div class="order-grid">
+          <div>
+            <h3>Как это происходит</h3>
+            <ol class="steps">
+              <li><b>Вы рассказываете.</b> Кому, по какому поводу, пара историй и черт характера, важные имена и даты.</li>
+              <li><b>Я пишу черновик</b> и присылаю текст, а для песни — короткий набросок мелодии.</li>
+              <li><b>Правим вместе,</b> пока не скажете «да, это про нас».</li>
+              <li><b>Получаете готовое:</b> текст в красивом оформлении, запись песни или живое исполнение.</li>
+            </ol>
+
+            <figure class="poem">
+              <figcaption>Пример — стихи к юбилею</figcaption>
+              <!-- Замените на настоящее стихотворение (с разрешения заказчика) -->
+              <p>Здесь будет четверостишие<br>из настоящего заказа —<br>тёплое, с именем и датой,<br>чтобы было видно стиль.</p>
+            </figure>
+          </div>
+
+          <form class="order-form" id="orderForm" novalidate>
+            <h3>Оставить заявку</h3>
+            <label for="of-name">Как вас зовут</label>
+            <input id="of-name" name="name" autocomplete="name" required>
+
+            <label for="of-type">Что нужно</label>
+            <select id="of-type" name="type">
+              <option>Стихотворение</option>
+              <option>Песня</option>
+              <option>Песня вживую</option>
+              <option>Пока не знаю, посоветуйте</option>
+            </select>
+
+            <label for="of-occasion">Повод и дата</label>
+            <input id="of-occasion" name="occasion" placeholder="Например: юбилей мамы, 12 марта">
+
+            <label for="of-story">Расскажите о человеке</label>
+            <textarea id="of-story" name="story" rows="4" placeholder="Имя, характер, пара историй, что важно упомянуть"></textarea>
+
+            <label for="of-contact">Телефон, Telegram или почта</label>
+            <input id="of-contact" name="contact" required>
+
+            <button type="submit" class="btn">Отправить заявку</button>
+            <p class="form-note" id="orderNote" aria-live="polite">Откроется ваша почта с готовым письмом. Можно и просто написать в Telegram.</p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="concerts" class="page alt">
       <div class="wrap">
         <h2>Концерты</h2>
         <ul class="gigs">
@@ -205,7 +284,7 @@
       </div>
     </section>
 
-    <section id="contacts" class="page alt">
+    <section id="contacts" class="page">
       <div class="wrap">
         <h2>Контакты</h2>
         <p class="lead">Концерты, частные мероприятия, уроки гитары, студийная работа.</p>
@@ -235,6 +314,33 @@
   </div>
 
   <script src="guitar.js"></script>
+  <script>
+    // Заявка на стихи/песню: собираем письмо и открываем почтовую программу.
+    (function () {
+      var ORDER_EMAIL = 'mail@example.com'; // ← почта для заявок
+      var form = document.getElementById('orderForm');
+      var note = document.getElementById('orderNote');
+      if (!form) return;
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var f = form.elements;
+        if (!f.name.value.trim() || !f.contact.value.trim()) {
+          note.textContent = 'Укажите, как вас зовут и как с вами связаться.';
+          (f.name.value.trim() ? f.contact : f.name).focus();
+          return;
+        }
+        var body = 'Имя: ' + f.name.value + '\n' +
+                   'Что нужно: ' + f.type.value + '\n' +
+                   'Повод и дата: ' + f.occasion.value + '\n' +
+                   'О человеке: ' + f.story.value + '\n' +
+                   'Связаться: ' + f.contact.value;
+        location.href = 'mailto:' + ORDER_EMAIL +
+          '?subject=' + encodeURIComponent('Заказ: ' + f.type.value) +
+          '&body=' + encodeURIComponent(body);
+        note.textContent = 'Если почта не открылась, напишите на ' + ORDER_EMAIL + ' или в Telegram — отвечу.';
+      });
+    })();
+  </script>
   <script>
     (function () {
       var btns = document.querySelectorAll('.look-switch button');
