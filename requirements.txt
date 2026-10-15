@@ -2,3 +2,4 @@ aiogram==3.13.1
 deep-translator==1.11.4
 faster-whisper==1.1.1
 langdetect==1.0.9
+anthropic==1.15.0
