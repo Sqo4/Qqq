@@ -3,6 +3,7 @@
 import html
 import json
 from dataclasses import dataclass
+from datetime import datetime
 
 import anthropic
 
@@ -74,6 +75,7 @@ class Entry:
     author: str
     text: str
     kind: str  # "text" | "voice"
+    date: datetime | None = None
 
 
 class SummaryError(Exception):
