@@ -1,0 +1,391 @@
+<title>Кофейня «Перемена»</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a school chalkboard menu; one column of boards, the order form is the one bright card, the barista list sits below it in MVP mode */
+:root {
+  --board: #1F3A30;
+  --board-deep: #172C24;
+  --chalk: #EEF1EA;
+  --chalk-soft: #A9BCB1;
+  --line: rgba(238, 241, 234, .18);
+  --yellow: #F2D35B;
+  --yellow-ink: #1F2A22;
+  --card: #F7F4EC;
+  --card-ink: #1E2922;
+  --card-soft: #5E6B62;
+  --card-line: #DCD7CA;
+  --ok: #3E8E5E;
+  --err: #B5402F;
+  --hand: "Caveat", "Comic Sans MS", cursive;
+  --body: "Golos Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--board-deep);
+  background-image: radial-gradient(ellipse at 30% 0%, rgba(255,255,255,.05), transparent 60%);
+  color: var(--chalk);
+  font: 400 17px/1.55 var(--body);
+}
+.demo-bar {
+  background: var(--yellow); color: var(--yellow-ink);
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.demo-bar b { font-weight: 600; }
+.seg { display: inline-flex; border: 1.5px solid var(--yellow-ink); border-radius: 999px; overflow: hidden; }
+.seg button {
+  font: 500 14px/1 var(--body); padding: 8px 14px; border: 0; cursor: pointer;
+  background: transparent; color: var(--yellow-ink);
+}
+.seg button[aria-pressed="true"] { background: var(--yellow-ink); color: var(--yellow); }
+.seg button:focus-visible { outline: 2px solid var(--yellow-ink); outline-offset: 2px; }
+
+.wrap {
+  max-width: 900px; margin: 0 auto;
+  padding-block: 32px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px;
+}
+h1, h2 { font-family: var(--hand); font-weight: 700; margin: 0; line-height: 1; text-wrap: balance; }
+h1 { font-size: clamp(56px, 13vw, 104px); color: var(--chalk); }
+h2 { font-size: clamp(38px, 7vw, 52px); }
+h3 { margin: 0; font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+.hand { font-family: var(--hand); font-size: 28px; line-height: 1.1; color: var(--yellow); }
+
+.hero { display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px; align-items: end; }
+.hero-text { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.hero-text .lead { font-size: 19px; color: var(--chalk-soft); max-width: 40ch; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 600 16px/1 var(--body); padding: 14px 20px; border-radius: 10px; text-decoration: none;
+  border: 2px solid var(--yellow); background: var(--yellow); color: var(--yellow-ink); cursor: pointer;
+}
+.btn.ghost { background: transparent; color: var(--chalk); border-color: var(--line); }
+.btn:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
+.btn[disabled] { opacity: .55; cursor: wait; }
+
+.schedule { border: 1.5px dashed var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.schedule .row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+.schedule .row span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--chalk); }
+.schedule .row span:first-child { color: var(--chalk-soft); }
+
+.board { background: var(--board); border: 10px solid #6B4F35; border-radius: 6px; padding: 28px 24px; box-shadow: inset 0 0 60px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 22px; }
+.menu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 40px; }
+.item { display: flex; align-items: baseline; gap: 8px; padding: 8px 0; min-width: 0; }
+.item .name { font-size: 17px; }
+.item .name small { display: block; color: var(--chalk-soft); font-size: 14px; }
+.item .dots { flex: 1; border-bottom: 2px dotted var(--line); transform: translateY(-4px); min-width: 16px; }
+.item .price { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--yellow); white-space: nowrap; }
+
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.fact { display: flex; flex-direction: column; gap: 4px; }
+.fact p { color: var(--chalk-soft); font-size: 15px; }
+
+/* MVP */
+.order { background: var(--card); color: var(--card-ink); border-radius: 16px; padding: 26px 24px; display: flex; flex-direction: column; gap: 20px; }
+.order h2 { color: var(--card-ink); }
+.order .sub { color: var(--card-soft); }
+form { display: flex; flex-direction: column; gap: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+label.f { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 500; min-width: 0; }
+input[type=text], select, textarea {
+  font: 400 16px/1.4 var(--body); color: var(--card-ink); background: #fff;
+  border: 1.5px solid var(--card-line); border-radius: 8px; padding: 11px 12px; width: 100%;
+  color-scheme: light;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--board); border-color: var(--board); }
+fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+legend { font-size: 14px; font-weight: 500; padding: 0; margin-bottom: 8px; }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.slot input { position: absolute; opacity: 0; pointer-events: none; }
+.slot span {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1.5px solid var(--card-line);
+  border-radius: 10px; background: #fff; cursor: pointer;
+}
+.slot b { font-family: var(--mono); font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.slot small { font-size: 12px; color: var(--card-soft); }
+.slot input:checked + span { border-color: var(--board); background: var(--board); color: var(--chalk); }
+.slot input:checked + span small { color: var(--chalk-soft); }
+.slot input:focus-visible + span { outline: 2px solid var(--board); outline-offset: 2px; }
+.slot input:disabled + span { opacity: .45; cursor: not-allowed; text-decoration: line-through; }
+.consent { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--card-soft); }
+.consent input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--board); flex: none; }
+.form-foot { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.total { font-family: var(--mono); font-size: 18px; font-variant-numeric: tabular-nums; }
+.order .btn { background: var(--board); border-color: var(--board); color: var(--chalk); }
+.msg { padding: 12px 14px; border-radius: 8px; font-size: 15px; }
+.msg.ok { background: #E1F0E6; color: #1E4D30; }
+.msg.err { background: #F7E2DE; color: #7A2416; }
+.mode-note { font-size: 13px; color: var(--card-soft); }
+
+.barista { display: flex; flex-direction: column; gap: 16px; }
+.barista-head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: end; }
+.stats { display: flex; gap: 18px; flex-wrap: wrap; color: var(--chalk-soft); font-size: 15px; }
+.stats b { color: var(--chalk); font-family: var(--mono); font-weight: 500; }
+.orders { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.o { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.o.ready { opacity: .55; }
+.o time { font-family: var(--mono); font-size: 16px; color: var(--yellow); font-variant-numeric: tabular-nums; }
+.o .what { min-width: 0; }
+.o .what small { display: block; color: var(--chalk-soft); font-size: 14px; overflow-wrap: anywhere; }
+.o button { font: 500 14px/1 var(--body); padding: 9px 12px; border-radius: 8px; border: 1.5px solid var(--line); background: transparent; color: var(--chalk); cursor: pointer; }
+.o button:focus-visible { outline: 2px solid var(--yellow); }
+.empty { border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px; color: var(--chalk-soft); text-align: center; }
+
+footer { color: var(--chalk-soft); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+
+@media (max-width: 720px) {
+  .hero { grid-template-columns: 1fr; }
+  .menu { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
+  .board { padding: 22px 16px; border-width: 8px; }
+  .o { grid-template-columns: 54px 1fr; }
+  .o button { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="demo-bar" role="region" aria-label="Учебный пример">
+  <span><b>Учебный пример.</b> Что получается к концу пары:</span>
+  <div class="seg" role="group" aria-label="Этап">
+    <button type="button" data-stage="site" aria-pressed="false">Пара 1 · сайт</button>
+    <button type="button" data-stage="mvp" aria-pressed="true">Пара 2 · MVP</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-text">
+      <p class="hand">корпус Б · первый этаж, у гардероба</p>
+      <h1>Перемена</h1>
+      <p class="lead">Кофе, который успеваешь выпить за 15 минут между парами.</p>
+      <div class="cta">
+        <a class="btn mvp-only" href="#order">Заказать к перемене</a>
+        <a class="btn ghost" href="#menu">Меню</a>
+      </div>
+    </div>
+    <aside class="schedule" aria-label="Перемены">
+      <p class="hand" style="font-size:26px">Перемены</p>
+      <div class="row"><span>После 1-й пары</span><span>10:10</span></div>
+      <div class="row"><span>После 2-й пары</span><span>11:55</span></div>
+      <div class="row"><span>Большая перемена</span><span>13:40</span></div>
+      <div class="row"><span>После 4-й пары</span><span>15:25</span></div>
+      <div class="row"><span>После 5-й пары</span><span>17:10</span></div>
+    </aside>
+  </header>
+
+  <section class="board" id="menu" aria-labelledby="menu-h">
+    <h2 id="menu-h">Меню</h2>
+    <div class="menu" id="menu-list"></div>
+    <p class="hand" style="font-size:24px">Принёс свою кружку — минус 20 ₽</p>
+  </section>
+
+  <section class="facts" aria-label="Почему мы">
+    <div class="fact"><h3>Без очереди</h3><p>Очередь на перемене — главная причина опоздать на пару. С предзаказом стаканчик ждёт тебя.</p></div>
+    <div class="fact"><h3>Студенческие цены</h3><p>Капучино дешевле, чем в автомате на втором этаже, и вкуснее.</p></div>
+    <div class="fact"><h3>Работаем 8:00–19:00</h3><p>По будням. В сессию — и по субботам до 16:00.</p></div>
+  </section>
+
+  <section class="order mvp-only" id="order" aria-labelledby="order-h">
+    <div>
+      <h2 id="order-h">Заказ к перемене</h2>
+      <p class="sub">Выбери напиток и перемену. Назовёшь имя на кассе — оплатишь и заберёшь.</p>
+    </div>
+    <form id="f" novalidate>
+      <div class="grid2">
+        <label class="f" for="f-name">Имя
+          <input type="text" id="f-name" name="name" maxlength="40" autocomplete="given-name" placeholder="Как к тебе обратиться">
+        </label>
+        <label class="f" for="f-drink">Напиток
+          <select id="f-drink" name="drink"></select>
+        </label>
+      </div>
+      <fieldset>
+        <legend>К какой перемене</legend>
+        <div class="slots" id="slots"></div>
+      </fieldset>
+      <label class="f" for="f-note">Пожелание (необязательно)
+        <textarea id="f-note" name="note" rows="2" maxlength="140" placeholder="Например: на овсяном молоке"></textarea>
+      </label>
+      <label class="consent" for="f-consent">
+        <input type="checkbox" id="f-consent" name="consent">
+        <span>Согласен на обработку имени для выдачи заказа. Имя удаляется в конце дня.</span>
+      </label>
+      <div id="f-msg" class="msg" hidden></div>
+      <div class="form-foot">
+        <span class="total" id="total">0 ₽</span>
+        <button class="btn" type="submit" id="f-submit">Заказать</button>
+      </div>
+      <p class="mode-note" id="mode-note">Подключаем хранилище заказов…</p>
+    </form>
+  </section>
+
+  <section class="barista mvp-only" aria-labelledby="bar-h">
+    <div class="barista-head">
+      <div>
+        <h2 id="bar-h">Экран бариста</h2>
+        <p style="color:var(--chalk-soft)">Сюда падают заказы. Отмечай готовые, чтобы видеть, что осталось.</p>
+      </div>
+      <div class="stats"><span>Всего <b id="s-all">0</b></span><span>Ждут <b id="s-wait">0</b></span><span>Выручка <b id="s-sum">0 ₽</b></span></div>
+    </div>
+    <ul class="orders" id="orders"></ul>
+  </section>
+
+  <footer>
+    <span>«Перемена» — вымышленная кофейня для учебного примера.</span>
+    <span>Корпус Б, 1 этаж</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const MENU = [
+    ['espresso', 'Эспрессо', '30 мл', 90],
+    ['americano', 'Американо', '250 мл', 120],
+    ['cappuccino', 'Капучино', '250 мл', 160],
+    ['latte', 'Латте', '350 мл', 180],
+    ['raf', 'Раф ванильный', '350 мл', 210],
+    ['cocoa', 'Какао', '250 мл', 150],
+    ['tea', 'Чай листовой', '400 мл', 90],
+    ['croissant', 'Круассан + американо', 'комбо к большой перемене', 190]
+  ];
+  const SLOTS = [['10:10', 'после 1-й'], ['11:55', 'после 2-й'], ['13:40', 'большая'], ['15:25', 'после 4-й'], ['17:10', 'после 5-й']];
+  const CAP = 8;                      // сколько стаканов бариста успевает к одной перемене
+  const LKEY = 'peremena:orders:v1';
+  const $ = id => document.getElementById(id);
+  const rub = n => n.toLocaleString('ru-RU') + ' ₽';
+  const byId = Object.fromEntries(MENU.map(m => [m[0], m]));
+
+  // Этап: сайт или MVP
+  const setStage = s => {
+    document.querySelectorAll('.mvp-only').forEach(el => { el.hidden = s !== 'mvp'; });
+    document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stage === s)));
+    try { localStorage.setItem('peremena:stage', s); } catch (_) {}
+  };
+  document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setStage(b.dataset.stage)));
+  let stage = 'mvp'; try { stage = localStorage.getItem('peremena:stage') || 'mvp'; } catch (_) {}
+  setStage(stage);
+
+  // Меню
+  $('menu-list').innerHTML = '';
+  for (const [, name, size, price] of MENU) {
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = '<span class="name"></span><span class="dots"></span><span class="price"></span>';
+    d.querySelector('.name').textContent = name;
+    const sm = document.createElement('small'); sm.textContent = size; d.querySelector('.name').appendChild(sm);
+    d.querySelector('.price').textContent = rub(price);
+    $('menu-list').appendChild(d);
+  }
+  for (const [id, name, , price] of MENU) {
+    const o = document.createElement('option'); o.value = id; o.textContent = `${name} — ${rub(price)}`; $('f-drink').appendChild(o);
+  }
+  $('f-drink').value = 'cappuccino';
+
+  // Хранилище: общий db, если доступен; иначе демо-режим в браузере
+  let orders = [];
+  let db = null, local = false;
+  const loadLocal = () => { try { return JSON.parse(localStorage.getItem(LKEY)) || []; } catch (_) { return []; } };
+  const saveLocal = () => { try { localStorage.setItem(LKEY, JSON.stringify(orders)); } catch (_) {} };
+  const goLocal = why => {
+    local = true; orders = loadLocal(); render();
+    $('mode-note').textContent = why || 'Демо-режим: заказы сохраняются только в этом браузере.';
+  };
+
+  const renderSlots = () => {
+    const box = $('slots'), prev = (box.querySelector('input:checked') || {}).value;
+    const today = new Date().toDateString();
+    box.innerHTML = '';
+    SLOTS.forEach(([t, label], i) => {
+      const used = orders.filter(o => o.slot === t && o.day === today).length, left = CAP - used;
+      const l = document.createElement('label'); l.className = 'slot'; l.htmlFor = 'slot-' + i;
+      l.innerHTML = `<input type="radio" name="slot" id="slot-${i}" value="${t}"><span><b>${t}</b><small></small></span>`;
+      l.querySelector('small').textContent = left > 0 ? `${label} · мест ${left}` : `${label} · мест нет`;
+      const inp = l.querySelector('input'); inp.disabled = left <= 0; if (prev === t && left > 0) inp.checked = true;
+      box.appendChild(l);
+    });
+  };
+
+  const render = () => {
+    renderSlots();
+    const today = new Date().toDateString();
+    const list = orders.filter(o => o.day === today).sort((a, b) => a.slot.localeCompare(b.slot) || a.at - b.at);
+    $('s-all').textContent = list.length;
+    $('s-wait').textContent = list.filter(o => !o.ready).length;
+    $('s-sum').textContent = rub(list.reduce((s, o) => s + (byId[o.drink] ? byId[o.drink][3] : 0), 0));
+    const ul = $('orders'); ul.innerHTML = '';
+    if (!list.length) { ul.innerHTML = '<li class="empty">Заказов на сегодня пока нет. Оформи первый в форме выше — он появится здесь.</li>'; return; }
+    for (const o of list) {
+      const li = document.createElement('li'); li.className = 'o' + (o.ready ? ' ready' : '');
+      li.innerHTML = '<time></time><div class="what"><span class="t"></span><small></small></div><button type="button"></button>';
+      li.querySelector('time').textContent = o.slot;
+      li.querySelector('.t').textContent = `${o.name} · ${byId[o.drink] ? byId[o.drink][1] : o.drink}`;
+      li.querySelector('small').textContent = o.note || 'без пожеланий';
+      const b = li.querySelector('button'); b.textContent = o.ready ? 'Вернуть в работу' : 'Готово';
+      b.addEventListener('click', () => toggleReady(o));
+      ul.appendChild(li);
+    }
+  };
+
+  const toggleReady = async o => {
+    if (local) { o.ready = !o.ready; saveLocal(); render(); return; }
+    try { await db.collection('orders').doc(o.id).update({ ready: !o.ready }); }
+    catch (_) { showMsg('err', 'Отметить заказ может только бариста с правом редактирования.'); }
+  };
+
+  const showMsg = (kind, text) => { const m = $('f-msg'); m.className = 'msg ' + kind; m.textContent = text; m.hidden = false; };
+
+  // Отправка заказа: проверка ввода, лимит мест и защита от повторных кликов
+  let lastAt = 0;
+  $('f').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = $('f-name').value.trim(), drink = $('f-drink').value, note = $('f-note').value.trim();
+    const slotEl = document.querySelector('#slots input:checked');
+    if (name.length < 2) return showMsg('err', 'Напиши имя, хотя бы две буквы: по нему бариста отдаст заказ.');
+    if (!slotEl) return showMsg('err', 'Выбери перемену, к которой приготовить напиток.');
+    if (!$('f-consent').checked) return showMsg('err', 'Отметь согласие на обработку имени, без него заказ не принять.');
+    if (Date.now() - lastAt < 20000) return showMsg('err', 'Заказ уже отправлен. Следующий можно через 20 секунд.');
+    const today = new Date().toDateString();
+    if (orders.filter(o => o.slot === slotEl.value && o.day === today).length >= CAP) { render(); return showMsg('err', 'На эту перемену места закончились, выбери другую.'); }
+    const order = { name: name.slice(0, 40), drink, note: note.slice(0, 140), slot: slotEl.value, day: today, at: Date.now(), ready: false };
+    $('f-submit').disabled = true;
+    try {
+      if (local) { orders.push({ id: 'l' + order.at, ...order }); saveLocal(); render(); }
+      else await db.collection('orders').add(order);
+      lastAt = Date.now();
+      showMsg('ok', `Принято! ${byId[drink][1]} будет ждать тебя в ${order.slot}. Назови на кассе имя «${order.name}».`);
+      $('f-name').value = ''; $('f-note').value = ''; $('f-consent').checked = false;
+    } catch (err) {
+      if (!local) { goLocal('Общее хранилище недоступно для твоего аккаунта, поэтому включён демо-режим: заказы видны только в этом браузере.'); showMsg('err', 'Не получилось сохранить заказ в общее хранилище. Включили демо-режим — отправь заказ ещё раз.'); }
+      else showMsg('err', 'Не получилось сохранить заказ. Попробуй ещё раз.');
+    } finally { $('f-submit').disabled = false; }
+  });
+
+  const total = () => { $('total').textContent = rub(byId[$('f-drink').value][3]); };
+  $('f-drink').addEventListener('change', total); total();
+
+  render();
+  (async () => {
+    db = window.claude && window.claude.use ? await window.claude.use('db') : null;
+    if (!db) return goLocal();
+    $('mode-note').textContent = 'Заказы сохраняются в общем хранилище и сразу видны на экране бариста.';
+    db.collection('orders').onSnapshot(snap => {
+      if (local) return;
+      orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      render();
+    }, () => goLocal());
+  })();
+})();
+</script>
