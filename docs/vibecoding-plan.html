@@ -1,0 +1,433 @@
+<title>Вайбкодинг до MVP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column on faint graph paper; the lesson runs as a minute-by-minute timeline, prompts sit in copyable blocks */
+:root {
+  --bg: #F3F5F8;
+  --paper: #FFFFFF;
+  --ink: #16202E;
+  --soft: #556274;
+  --line: #D9DFE8;
+  --grid: rgba(43, 75, 216, .05);
+  --accent: #2B4BD8;
+  --accent-ink: #FFFFFF;
+  --mark: #E8EDFF;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141C; --paper: #161D28; --ink: #E7ECF3; --soft: #9AA7B8; --line: #2A3445;
+    --grid: rgba(120, 146, 255, .06); --accent: #7F97FF; --accent-ink: #0F141C; --mark: #1E2A47;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141C; --paper: #161D28; --ink: #E7ECF3; --soft: #9AA7B8; --line: #2A3445;
+  --grid: rgba(120, 146, 255, .06); --accent: #7F97FF; --accent-ink: #0F141C; --mark: #1E2A47;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font: 400 17px/1.6 var(--body);
+}
+.wrap {
+  max-width: 820px; margin: 0 auto;
+  padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 56px;
+}
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 6vw, 48px); font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: clamp(22px, 4vw, 28px); font-weight: 700; }
+h3 { font-size: 17px; font-weight: 500; }
+p { margin: 0; }
+.label { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.lead { font-size: 19px; color: var(--soft); max-width: 62ch; }
+
+header { display: flex; flex-direction: column; gap: 18px; }
+.thesis {
+  background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  padding: 18px 20px; font-size: 18px; font-weight: 500;
+}
+
+nav { display: flex; flex-wrap: wrap; gap: 8px; }
+nav a {
+  font: 500 14px/1 var(--body); color: var(--ink); text-decoration: none;
+  border: 1px solid var(--line); background: var(--paper); padding: 10px 14px; border-radius: 999px;
+}
+nav a:hover, nav a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+/* cycle */
+.cycle { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; list-style: none; padding: 0; margin: 0; counter-reset: c; }
+.cycle li {
+  counter-increment: c; background: var(--paper); border: 1px solid var(--line);
+  padding: 8px 12px; border-radius: 6px; font-size: 15px; display: flex; gap: 8px; align-items: baseline;
+}
+.cycle li::before { content: counter(c); font: 500 12px var(--mono); color: var(--accent); }
+.cycle li.loop { background: var(--mark); border-color: transparent; }
+
+section { display: flex; flex-direction: column; gap: 24px; scroll-margin-top: 20px; }
+.sec-head { display: flex; flex-direction: column; gap: 10px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--soft); font-size: 15px; }
+
+/* timeline */
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.slot { display: grid; grid-template-columns: 86px 1fr; gap: 18px; padding: 20px 0; border-top: 1px solid var(--line); }
+.slot:last-child { border-bottom: 1px solid var(--line); }
+.time { font: 500 14px/1.7 var(--mono); color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.slot-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.slot-body ul, .slot-body ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.slot-body li::marker { color: var(--soft); }
+.why { color: var(--soft); font-size: 15px; }
+.why b { color: var(--ink); font-weight: 600; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.two > div { background: var(--paper); border: 1px solid var(--line); padding: 14px 16px; border-radius: 6px; min-width: 0; }
+.two h4 { margin: 0 0 6px; font: 600 14px var(--body); }
+.two ul { padding-left: 18px; font-size: 15px; }
+.tip { background: var(--mark); padding: 12px 16px; border-radius: 6px; font-size: 15px; }
+
+/* checklist */
+.checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.check { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.check li { padding-left: 22px; position: relative; }
+.check li::before { content: ""; position: absolute; left: 0; top: .35em; width: 12px; height: 12px; border: 1.5px solid var(--accent); border-radius: 3px; }
+
+/* prompts */
+.prompts { display: flex; flex-direction: column; gap: 12px; }
+.prompt { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.prompt-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.prompt-head h3 { font-size: 14px; }
+.prompt pre {
+  margin: 0; padding: 14px; white-space: pre-wrap; word-break: break-word;
+  font: 400 14px/1.6 var(--mono); color: var(--ink);
+}
+.prompt pre em { font-style: normal; color: var(--accent); }
+button.copy {
+  font: 500 13px/1 var(--body); color: var(--accent); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; cursor: pointer; flex: none;
+}
+button.copy:hover, button.copy:focus-visible { border-color: var(--accent); outline: none; }
+button.copy.done { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+footer { color: var(--soft); font-size: 14px; }
+
+@media (max-width: 700px) {
+  .checks { grid-template-columns: 1fr; }
+  .two { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  .slot { grid-template-columns: 1fr; gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="label">План на 2 пары · 2 × 90 минут</span>
+  <h1>Вайбкодинг: от идеи до первого MVP</h1>
+  <p class="lead">Как с помощью ИИ сделать сайт и первую рабочую версию продукта: на что смотреть, какие вопросы задавать, что менять и как проверять.</p>
+  <p class="thesis">Вайбкодинг — это не «ИИ пишет за меня». Ты ведёшь продукт, а ИИ — твоя команда разработки. Код пишет модель, но решаешь ты: что делать, что выкинуть, что считать готовым и как это проверить.</p>
+  <nav aria-label="Разделы">
+    <a href="#cycle">Рабочий цикл</a>
+    <a href="#p1">Пара 1</a>
+    <a href="#p2">Пара 2</a>
+    <a href="#checks">Чек-лист вопросов</a>
+    <a href="#prompts">Шаблоны запросов</a>
+  </nav>
+</header>
+
+<section id="cycle">
+  <div class="sec-head">
+    <span class="label">Сквозная идея курса</span>
+    <h2>Рабочий цикл</h2>
+  </div>
+  <ol class="cycle">
+    <li>Идея одной фразой</li>
+    <li>Черновик за минуты</li>
+    <li>Потрогать руками</li>
+    <li>«Что не так?»</li>
+    <li>Одна правка — один запрос</li>
+    <li>Проверить на телефоне</li>
+    <li>Показать людям по ссылке</li>
+    <li class="loop">Новые функции из обратной связи → снова шаг 3</li>
+  </ol>
+</section>
+
+<section id="p1">
+  <div class="sec-head">
+    <span class="label">Пара 1</span>
+    <h2>Как думать и ставить задачу: от идеи до живого сайта</h2>
+    <div class="meta"><span>Итог пары: у каждого есть понимание цикла и план своего сайта</span></div>
+  </div>
+  <ol class="timeline">
+    <li class="slot">
+      <span class="time">0–10</span>
+      <div class="slot-body">
+        <h3>Знакомство и крючок</h3>
+        <ul>
+          <li>Покажи вживую пару своих работ и дай залу ими поиграть.</li>
+          <li>Вопрос в зал: «Кто хоть раз запускал свой сайт?» Цель — чтобы к концу курса его запустил каждый.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">10–25</span>
+      <div class="slot-body">
+        <h3>Что такое вайбкодинг и где он ломается</h3>
+        <p>Инструменты: Claude Code (есть и с телефона), Cursor, Lovable, Bolt, артефакты Claude.</p>
+        <div class="two">
+          <div><h4>ИИ силён</h4><ul><li>вёрстка и анимации</li><li>типовой бэкенд и интеграции</li><li>README и тесты</li></ul></div>
+          <div><h4>Нужен человек</h4><ul><li>идея, вкус, приоритеты</li><li>проверка, что всё работает на самом деле</li><li>безопасность и закон</li></ul></div>
+        </div>
+        <p class="why"><b>Главное правило:</b> не верь цифрам и словам «готово, работает» на слово. Проси доказательство: вывод теста, скриншот, замер.</p>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">25–45</span>
+      <div class="slot-body">
+        <h3>Как ставить задачу ИИ: 5 принципов</h3>
+        <ol>
+          <li><b>Начни с короткой идеи и сразу получи черновик.</b> Длинное ТЗ до первой версии почти всегда лишнее: критиковать готовое проще, чем угадывать заранее.</li>
+          <li><b>Шаблон — черновик, а не результат.</b> По умолчанию ИИ выдаёт «среднее по интернету». Отличие от среднего — твоя работа, и типовую версию не жалко выкинуть целиком.</li>
+          <li><b>Описывай баг как пользователь:</b> что происходит → в каком сценарии мешает → как должно быть → «перескажи, как понял задачу». Ошибку в понимании видно до того, как модель что-то сломает.</li>
+          <li><b>Одна правка — один запрос — один коммит.</b> Так проще проверить результат и откатить неудачное.</li>
+          <li><b>Думай о продукте, а не об игрушке.</b> Что человек должен понять за 5 секунд? Главное — на первый экран, эффекты — ниже.</li>
+        </ol>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">45–55</span>
+      <div class="slot-body">
+        <h3>Вопросы, которые стоит задавать себе</h3>
+        <p>Раздай <a href="#checks">чек-лист</a> и пройдись по нему: про идею, после каждой версии, перед показом людям.</p>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">55–85</span>
+      <div class="slot-body">
+        <h3>Live-coding: сайт с нуля на глазах у зала</h3>
+        <p>Тему выбирает аудитория: преподаватель, кофейня, студенческий клуб. Проговаривай вслух, <b>почему</b> делаешь каждый шаг.</p>
+        <ol>
+          <li>Запрос одной фразой → первая версия (≈5 мин).</li>
+          <li>Открыть в браузере, назвать вслух 3 проблемы и исправить по одной.</li>
+          <li>Открыть с телефона (QR на проекторе) и найти, что сломалось.</li>
+          <li>Попросить одну уникальную фишку и честно оценить, стало ли лучше или просто шумнее.</li>
+          <li>Опубликовать ссылку (артефакт Claude, GitHub Pages, Netlify).</li>
+        </ol>
+        <p class="tip">Запасной план: заранее сохрани скриншоты каждого шага и готовую финальную версию на случай, если подведёт сеть или ИИ.</p>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">85–90</span>
+      <div class="slot-body">
+        <h3>Домашнее задание</h3>
+        <p>Одностраничный сайт о себе или о вымышленном бизнесе: мобильная версия, одна уникальная фишка, публичная ссылка. Принести 3 правки, которые попросили у ИИ, и объяснить, почему каждая была нужна.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<section id="p2">
+  <div class="sec-head">
+    <span class="label">Пара 2</span>
+    <h2>От сайта к MVP: требования, данные, защита, тесты, показ</h2>
+    <div class="meta"><span>Итог пары: студенты знают, что отличает поделку от продукта, которым можно пользоваться</span></div>
+  </div>
+  <ol class="timeline">
+    <li class="slot">
+      <span class="time">0–10</span>
+      <div class="slot-body">
+        <h3>Разбор домашек</h3>
+        <p>2–3 студента показывают сайт и свои 3 правки. Комментируй вопросами из чек-листа, а не оценками.</p>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">10–25</span>
+      <div class="slot-body">
+        <h3>Что такое MVP и как не утонуть</h3>
+        <ul>
+          <li>MVP решает <b>одну</b> проблему для <b>реального</b> человека. Проверка простая: кто-то им пользуется, и ты чему-то научился.</li>
+          <li>Лучшие функции появляются из использования, а не из головы: запусти минимум, посмотри, где неудобно, добавь то, чего не хватает.</li>
+          <li>Главный риск вайбкодинга — переусложнение: ИИ за вечер напишет десять функций, и ни одна не будет доведена. Упражнение для зала: «Что из списка функций MVP, а что нет?»</li>
+        </ul>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">25–40</span>
+      <div class="slot-body">
+        <h3>Требования до кода</h3>
+        <ul>
+          <li>Сначала узнай у заказчика или пользователя, что нужно. Для бота или ассистента база знаний и правила важнее кода.</li>
+          <li>Выясни ограничения: что продукт обещать <b>не должен</b>, какие данные можно показывать, кто проверяет результат.</li>
+          <li>Приём: попроси ИИ составить список вопросов к заказчику, потом вычеркни лишнее.</li>
+        </ul>
+        <p class="tip">Практика 5 минут в парах: напишите 5 вопросов заказчику своего MVP.</p>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">40–60</span>
+      <div class="slot-body">
+        <h3>Бэкенд, данные и безопасность</h3>
+        <ul>
+          <li><b>Простой стек.</b> Чем меньше движущихся частей (сервисов, зависимостей), тем меньше ломается. Один сервер и одна база — нормально для MVP.</li>
+          <li><b>Пароли</b> хранятся только как хеш, на вход стоит лимит попыток.</li>
+          <li><b>Сессии</b> — в cookie с флагами <code>HttpOnly</code> и <code>SameSite</code>.</li>
+          <li><b>Загрузки:</b> принимай только нужные типы файлов (проверка по содержимому), ограничь размер, удаляй метаданные из фото.</li>
+          <li><b>Чувствительные данные</b> показывай минимуму людей и удаляй, когда они больше не нужны.</li>
+          <li><b>Формы:</b> лимиты против спама, проверка ввода на сервере.</li>
+          <li><b>Секреты</b> (токены, API-ключи) — только в переменных окружения, никогда в коде и в гите.</li>
+          <li><b>Закон:</b> персональные данные граждан РФ хранятся на серверах в России (152-ФЗ).</li>
+        </ul>
+        <p class="why"><b>Что сказать залу:</b> ИИ сам о защите часто не вспоминает. Об этом нужно попросить отдельно — см. шаблон «Безопасность».</p>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">60–75</span>
+      <div class="slot-body">
+        <h3>Как тестировать</h3>
+        <ol>
+          <li><b>Руками и на своём телефоне</b>, вертикально и горизонтально. Большинство проблем находится, когда сам пользуешься продуктом.</li>
+          <li><b>Автотест сценария пользователя</b> (например, Playwright в режиме телефона): весь путь от входа до целевого действия, проверка ошибок в консоли, скриншот при падении.</li>
+          <li><b>Демо-данные:</b> заранее созданные тестовые пользователи и записи, чтобы сразу видеть, как всё работает, не собирая живых людей.</li>
+          <li><b>Демо по ссылке без сервера:</b> статическая копия, где данные хранятся в браузере. Можно показать людям до деплоя.</li>
+          <li><b>Проверка слов ИИ:</b> «готово» засчитывается только вместе с выводом теста или скриншотом.</li>
+        </ol>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">75–85</span>
+      <div class="slot-body">
+        <h3>Деплой и грабли окружения</h3>
+        <ul>
+          <li>Статический сайт → GitHub Pages или Netlify. Сервер → VPS, Docker, Caddy (HTTPS настраивает сам). Бот → любой VPS.</li>
+          <li>Типичные ошибки: нет доступа при пуше (403), закрытая сеть, не хватает переменной окружения. Читай ошибку целиком и спрашивай ИИ, что она значит. Обычно это настройки, а не «всё сломалось».</li>
+          <li>README — часть продукта: как запустить, какие переменные нужны, что заполнить. Пишет ИИ, проверяешь ты.</li>
+        </ul>
+      </div>
+    </li>
+    <li class="slot">
+      <span class="time">85–90</span>
+      <div class="slot-body">
+        <h3>Итог и финальное задание</h3>
+        <p>Повтори <a href="#cycle">рабочий цикл</a>, добавив в него защиту и тест сценария.</p>
+        <p>Задание: превратить сайт из первой пары в MVP с одной функцией, которая сохраняет данные (заявка, запись, отзыв), плюс README и ссылка. Бонус: автотест одного сценария.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<section id="checks">
+  <div class="sec-head">
+    <span class="label">Раздаточный материал</span>
+    <h2>Чек-лист вопросов к себе</h2>
+  </div>
+  <div class="checks">
+    <div class="check">
+      <h3>Про идею</h3>
+      <ul>
+        <li>Кто пользователь?</li>
+        <li>Какое одно действие он должен сделать?</li>
+        <li>Чем это отличается от шаблона?</li>
+        <li>Что можно не делать вообще?</li>
+      </ul>
+    </div>
+    <div class="check">
+      <h3>После каждой версии</h3>
+      <ul>
+        <li>Что я вижу первым? Это то, что нужно?</li>
+        <li>Выглядит дёшево или по-настоящему?</li>
+        <li>Как это на телефоне?</li>
+        <li>Что раздражает при использовании?</li>
+        <li>Что можно выкинуть?</li>
+      </ul>
+    </div>
+    <div class="check">
+      <h3>Перед показом людям</h3>
+      <ul>
+        <li>Открывается по ссылке без установки?</li>
+        <li>Где заглушки и кто их заполнит?</li>
+        <li>Не утекают ли данные и ключи?</li>
+        <li>Есть доказательство, что главный сценарий работает?</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="prompts">
+  <div class="sec-head">
+    <span class="label">Раздаточный материал</span>
+    <h2>Шаблоны запросов</h2>
+    <p class="why">Синим выделено то, что нужно подставить самому.</p>
+  </div>
+  <div class="prompts">
+    <div class="prompt">
+      <div class="prompt-head"><h3>Старт проекта</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Сделай <em>[что]</em> для <em>[кого]</em>. Главное действие пользователя — <em>[что]</em>. Хочу, чтобы было не как у всех: <em>[фишка]</em>. Сделай первую версию, я посмотрю и скажу, что менять.</pre>
+    </div>
+    <div class="prompt">
+      <div class="prompt-head"><h3>Баг</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Сейчас происходит <em>[X]</em>. Мне это мешает, когда <em>[сценарий]</em>. Нужно, чтобы <em>[Y]</em>. Перескажи, как понял задачу, прежде чем менять.</pre>
+    </div>
+    <div class="prompt">
+      <div class="prompt-head"><h3>Сделать по-настоящему</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Сейчас <em>[элемент]</em> выглядит игрушечно. Сделай реалистично: <em>[детали, на которые я обращаю внимание]</em>.</pre>
+    </div>
+    <div class="prompt">
+      <div class="prompt-head"><h3>Мобильная версия</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Открыл на телефоне вертикально и горизонтально: <em>[что не так]</em>. Почини так, чтобы <em>[ожидание]</em>. На компьютере ничего не должно сломаться.</pre>
+    </div>
+    <div class="prompt">
+      <div class="prompt-head"><h3>Безопасность</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Проверь проект как специалист по безопасности: где можно украсть данные, обойти вход, загрузить вредный файл, заспамить форму? Исправь и опиши в README, как устроена защита.</pre>
+    </div>
+    <div class="prompt">
+      <div class="prompt-head"><h3>Автотест</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Напиши e2e-тест, который проходит путь пользователя <em>[шаги]</em> на экране телефона, проверяет, что в консоли нет ошибок, и делает скриншот при падении. Запусти и покажи вывод.</pre>
+    </div>
+    <div class="prompt">
+      <div class="prompt-head"><h3>Проверка ИИ</h3><button class="copy" type="button">Скопировать</button></div>
+      <pre>Ты пишешь, что всё работает. Докажи: покажи вывод теста или скриншот.</pre>
+    </div>
+  </div>
+</section>
+
+<footer>Тайминг ориентировочный: если live-coding затянулся, сократи блок про чек-лист и раздай его на бумаге.</footer>
+
+</div>
+
+<script>
+document.querySelectorAll('.prompt').forEach(card => {
+  const btn = card.querySelector('button.copy');
+  const pre = card.querySelector('pre');
+  btn.addEventListener('click', () => {
+    const done = () => {
+      btn.textContent = 'Скопировано';
+      btn.classList.add('done');
+      setTimeout(() => { btn.textContent = 'Скопировать'; btn.classList.remove('done'); }, 1600);
+    };
+    const select = () => {
+      const r = document.createRange(); r.selectNodeContents(pre);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = 'Выделено — нажмите Ctrl+C';
+    };
+    try {
+      navigator.clipboard.writeText(pre.innerText).then(done, select);
+    } catch (_) { select(); }
+  });
+});
+</script>
