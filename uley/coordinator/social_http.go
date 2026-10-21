@@ -417,11 +417,22 @@ func (s *Server) askAI(c Chat, u User) (Message, error) {
 	for len(msgs) > 0 && msgs[0].Role == "assistant" {
 		msgs = msgs[1:]
 	}
+	agentic := c.Kind != ChatLobby
+	if agentic {
+		system += s.agentSystem(c, u)
+	}
 	msgs = append([]protocol.Message{{Role: "system", Content: system}}, msgs...)
 
 	ai, err := s.store.AddMessage(Message{ChatID: c.ID, Role: "assistant", AuthorName: "Улей", Status: MsgPending, AskedBy: u.ID})
 	if err != nil {
 		return ai, err
+	}
+	if agentic {
+		if err := s.startAgent(ai, c, u, msgs); err != nil {
+			return ai, err
+		}
+		s.bell.ring()
+		return ai, nil
 	}
 	taskID, err := s.store.CreateTask(s.hiveModel(), taskPayload{Messages: msgs, MaxTokens: 1024, Temperature: 0.7}, 1)
 	if err != nil {
@@ -543,8 +554,9 @@ func (s *Server) liveStats() (protocol.Stats, error) {
 func (s *Server) runLive(ctx context.Context) {
 	stats := time.NewTicker(2 * time.Second)
 	defer stats.Stop()
+	var lastSchedules time.Time
+	wake := s.bell.wait()
 	for {
-		wake := s.bell.wait()
 		select {
 		case <-ctx.Done():
 			return
@@ -556,9 +568,16 @@ func (s *Server) runLive(ctx context.Context) {
 			}
 		case <-wake:
 		}
+		// Subscribe before working, so a ring during the work is not lost.
+		wake = s.bell.wait()
 		changed, err := s.store.FinishAnswers()
 		if err != nil {
 			log.Printf("answers: %v", err)
+		}
+		changed = append(changed, s.advanceAgents()...)
+		if time.Since(lastSchedules) >= 20*time.Second {
+			lastSchedules = time.Now()
+			changed = append(changed, s.runSchedules()...)
 		}
 		for _, m := range changed {
 			audience, err := s.store.ChatAudience(m.ChatID)

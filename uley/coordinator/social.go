@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, id);
 CREATE INDEX IF NOT EXISTS messages_pending ON messages(status) WHERE status='pending';
 INSERT OR IGNORE INTO chats(id, kind, title, created_at, updated_at) VALUES('lobby', 'lobby', 'Общий чат', 0, 0);
-` + apiKeysSchema
+` + apiKeysSchema + agentSchema
 
 const (
 	ChatPersonal = "personal"
@@ -537,7 +537,7 @@ func (s *Store) PendingAIMessages(userID string) int {
 // messages and returns the messages that changed.
 func (s *Store) FinishAnswers() ([]Message, error) {
 	rows, err := s.db.Query(`SELECT m.id, t.status, t.output, t.error FROM messages m JOIN tasks t ON t.id=m.task_id
-		WHERE m.status='pending' AND t.status IN ('done','failed')`)
+		WHERE m.status='pending' AND t.status IN ('done','failed') AND m.id NOT IN (SELECT message_id FROM agent_runs)`)
 	if err != nil {
 		return nil, err
 	}
@@ -592,6 +592,15 @@ func (s *Store) ChatAudience(chatID string) ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func (s *Store) GetUser(id string) (User, error) {
+	var u User
+	err := s.db.QueryRow(`SELECT id, login, name FROM users WHERE id=?`, id).Scan(&u.ID, &u.Login, &u.Name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	return u, err
 }
 
 func (s *Store) CountUsers() (int, error) {

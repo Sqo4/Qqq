@@ -46,6 +46,8 @@ type Config struct {
 	// SignupKey, if set, is required to create an account (e.g. a
 	// university running its own hive).
 	SignupKey string
+	// Location is the time zone for schedules (default Europe/Moscow).
+	Location *time.Location
 	// RequireAPIKey closes the task API to anonymous callers even when no
 	// admin keys are set; people then use the personal keys from their
 	// account (e.g. for Hermes Agent).
@@ -53,6 +55,9 @@ type Config struct {
 }
 
 func (c *Config) defaults() {
+	if c.Location == nil {
+		c.Location, _ = time.LoadLocation("Europe/Moscow")
+	}
 	if c.JobTimeout == 0 {
 		c.JobTimeout = 3 * time.Minute
 	}
