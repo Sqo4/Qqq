@@ -46,6 +46,10 @@ type Config struct {
 	// SignupKey, if set, is required to create an account (e.g. a
 	// university running its own hive).
 	SignupKey string
+	// TelegramToken enables the Telegram bot (from @BotFather).
+	TelegramToken string
+	// TelegramAPI overrides the Bot API address (tests).
+	TelegramAPI string
 	// Location is the time zone for schedules (default Europe/Moscow).
 	Location *time.Location
 	// RequireAPIKey closes the task API to anonymous callers even when no
@@ -77,6 +81,7 @@ type Server struct {
 	regs   *rateLimiter
 	logins *rateLimiter
 	events *hub
+	tg     *telegramBot
 }
 
 func NewServer(store *Store, cfg Config) *Server {
@@ -94,6 +99,9 @@ func NewServer(store *Store, cfg Config) *Server {
 	s.mux.HandleFunc("GET "+p+"/stats", s.handleStats)
 	s.mux.HandleFunc("GET "+p+"/models", s.handleModels)
 	s.mux.HandleFunc("GET "+p+"/hive", s.handleHive)
+	if cfg.TelegramToken != "" {
+		s.tg = newTelegramBot(s)
+	}
 	s.registerSocial()
 	if cfg.Chain != nil {
 		cfg.Chain.bell = s.bell
@@ -124,6 +132,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Run(ctx context.Context) {
 	if s.cfg.Chain != nil {
 		go s.cfg.Chain.Run(ctx)
+	}
+	if s.tg != nil {
+		go s.tg.run(ctx)
 	}
 	go s.runLive(ctx)
 	t := time.NewTicker(5 * time.Second)

@@ -106,6 +106,9 @@ func (s *Server) registerSocial() {
 	s.mux.HandleFunc("POST "+p+"/projects/join", s.userAuth(s.handleJoinProject))
 	s.mux.HandleFunc("POST "+p+"/projects/{id}/leave", s.userAuth(s.handleLeaveProject))
 	s.registerAgentAPI()
+	s.mux.HandleFunc("GET "+p+"/telegram", s.userAuth(s.handleTelegramState))
+	s.mux.HandleFunc("POST "+p+"/telegram/code", s.userAuth(s.handleTelegramCode))
+	s.mux.HandleFunc("DELETE "+p+"/telegram", s.userAuth(s.handleTelegramUnlink))
 	s.mux.HandleFunc("GET "+p+"/keys", s.userAuth(s.handleListKeys))
 	s.mux.HandleFunc("POST "+p+"/keys", s.userAuth(s.handleCreateKey))
 	s.mux.HandleFunc("DELETE "+p+"/keys/{id}", s.userAuth(s.handleDeleteKey))
@@ -585,6 +588,9 @@ func (s *Server) runLive(ctx context.Context) {
 			if err == nil {
 				s.events.send("message", m, audience, false)
 			}
+		}
+		if s.tg != nil {
+			s.tg.deliver(ctx, changed)
 		}
 	}
 }

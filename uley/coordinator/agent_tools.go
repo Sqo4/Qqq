@@ -344,6 +344,12 @@ func (s *Server) runSchedules() []Message {
 		ai, err := s.askAI(c, u)
 		if err == nil {
 			changed = append(changed, ai)
+			// Scheduled results also go to Telegram, if the person linked it.
+			if s.tg != nil {
+				if l, err := s.store.TelegramByUser(u.ID); err == nil {
+					s.tg.expect(ai.ID, l.TgChat)
+				}
+			}
 		}
 	}
 	return changed

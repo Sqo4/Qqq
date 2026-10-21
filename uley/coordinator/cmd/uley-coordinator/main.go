@@ -84,6 +84,8 @@ func main() {
 	dbPath := flag.String("db", env("ULEY_DB", "uley.db"), "SQLite database file")
 	apiKeys := flag.String("api-keys", env("ULEY_API_KEYS", ""), "comma separated API keys allowed to submit tasks (empty = open, for testing only)")
 	requireKey := flag.Bool("require-api-key", os.Getenv("ULEY_REQUIRE_API_KEY") != "0", "close /v1 and the task API to callers without a key (admin key or a personal key from the web app); set false only for local tests")
+	tgToken := flag.String("telegram-token", env("ULEY_TELEGRAM_TOKEN", ""), "Telegram bot token from @BotFather; enables the Telegram bot")
+	tz := flag.String("tz", env("ULEY_TZ", "Europe/Moscow"), "time zone for scheduled tasks")
 	signupKey := flag.String("signup-key", env("ULEY_SIGNUP_KEY", ""), "optional code people must enter to create an account (e.g. for a university)")
 	joinKey := flag.String("join-key", env("ULEY_JOIN_KEY", ""), "optional key nodes must know to register")
 	verify := flag.Float64("verify-rate", 0.1, "share of temperature-0 tasks computed twice for verification")
@@ -113,12 +115,16 @@ func main() {
 	if !ok {
 		log.Fatalf("unknown model %q", *hiveModel)
 	}
+	loc, err := time.LoadLocation(*tz)
+	if err != nil {
+		log.Fatalf("time zone %q: %v", *tz, err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	cfg := coordinator.Config{
 		APIKeys: keys, JoinKey: *joinKey, VerifyRate: *verify, JobTimeout: *jobTimeout, Web: web.FS,
-		HiveModel: model.ID, SignupKey: *signupKey, RequireAPIKey: *requireKey,
+		Location: loc, HiveModel: model.ID, SignupKey: *signupKey, RequireAPIKey: *requireKey, TelegramToken: *tgToken,
 	}
 	if model.Chain {
 		head := *headBin

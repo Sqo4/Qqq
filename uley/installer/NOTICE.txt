@@ -1,7 +1,9 @@
 Uley (Улей) — distributed volunteer inference client.
+Copyright (c) 2026 Владимир. All rights reserved.
 
 Third-party components:
 - llama.cpp (https://github.com/ggml-org/llama.cpp), MIT License, see engine/LICENSE-llama.cpp
 - fyne.io/systray, Apache License 2.0
 - golang.org/x/sys, BSD-3-Clause
 - Qwen3 models (downloaded on demand from huggingface.co/Qwen), Apache License 2.0
+- modernc.org/sqlite, BSD-3-Clause

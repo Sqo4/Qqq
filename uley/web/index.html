@@ -94,12 +94,14 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
  <div id="navUser" class="hidden">
   <div class="item" data-chat="lobby"><span>💬</span><span class="t">Общий чат</span><span class="badge hidden"></span></div>
   <div class="item" id="mindBtn"><span>🧠</span><span class="t">Что Улей помнит</span></div>
+  <div class="item" id="tgBtn"><span>📱</span><span class="t">Telegram</span></div>
   <h4>Мои чаты <button class="ghost" id="newChat">＋</button></h4>
   <div id="chatList"></div>
   <h4>Проекты <span><button class="ghost" id="joinBtn" title="Вступить по коду">🔑</button> <button class="ghost" id="newProject">＋</button></span></h4>
   <div id="projectList"></div>
  </div>
  <p class="small muted" style="padding:12px 6px">Улей — распределённая нейросеть на видеокартах добровольцев. <a href="/download">Подключить свой компьютер</a></p>
+ <p class="small muted" style="padding:0 6px">© 2026 Улей · Владимир</p>
 </nav>
 
 <main id="main">
@@ -201,6 +203,11 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
  </div>
  <div id="mindSkills" class="hidden"><div id="skillList"></div><p class="small muted">Навык — сохранённая инструкция для повторяющейся задачи. Попросите Улей: «сохрани это как навык».</p></div>
  <div id="mindSched" class="hidden"><div id="schedList"></div><p class="small muted">Задания ставятся в чате: «каждое утро в 9 присылай план на день», «напомни в пятницу в 18:00 сдать отчёт».</p></div>
+ <div class="row"><button value="close">Закрыть</button></div>
+</form></dialog>
+<dialog id="dlgTg"><form method="dialog">
+ <h3 style="margin-top:0">Улей в Telegram</h3>
+ <div id="tgBody"></div>
  <div class="row"><button value="close">Закрыть</button></div>
 </form></dialog>
 <dialog id="dlgJoin"><form method="dialog" id="fJoin">
@@ -433,6 +440,19 @@ async function openMind(project){mindProject=project;mindTab('tabMem');
 $('mindBtn').onclick=()=>{closeNav();openMind(null)};$('projMindBtn').onclick=()=>openMind(S.project.id);
 $('memAdd').onclick=async()=>{const t=$('memText').value.trim();if(!t)return;const q=mindProject?'?project='+mindProject:'';
  try{await api('/memories'+q,{method:'POST',body:{text:t}});$('memText').value='';loadMind()}catch(e){alert(e.message)}};
+
+/* ---------- Telegram ---------- */
+async function openTg(){closeNav();const box=$('tgBody');box.innerHTML='<p class="muted">Загружаем…</p>';if(!$('dlgTg').open)$('dlgTg').showModal();
+ const st=await api('/telegram');
+ if(!st.enabled){box.innerHTML='<p>Telegram-бот на этом сервере пока не настроен. Попросите администратора Улья его включить.</p>';return}
+ if(st.linked){box.innerHTML='<p>✅ Telegram подключён. Пишите боту <b></b> — отвечает Улей, туда же приходят задания по расписанию.</p><p><button type="button" class="ghost" id="tgUnlink">Отключить Telegram</button></p>';
+  box.querySelector('b').textContent='@'+st.bot;
+  $('tgUnlink').onclick=async()=>{await api('/telegram',{method:'DELETE'});openTg()};return}
+ const c=await api('/telegram/code',{method:'POST',body:{}});
+ box.innerHTML='<p>Откройте бота и нажмите «Старт» — аккаунт подключится сам:</p><p><a target="_blank" rel="noopener" style="font-size:18px"></a></p><p class="small muted">Или отправьте боту <b></b> сообщение <span class="code"></span>. Код действует 15 минут.</p><p><button type="button" class="ghost" id="tgCheck">Я подключил, проверить</button></p>';
+ const a=box.querySelector('a');a.href=c.link;a.textContent='Открыть @'+c.bot;box.querySelector('b').textContent='@'+c.bot;box.querySelector('.code').textContent='/start '+c.code;
+ $('tgCheck').onclick=openTg}
+$('tgBtn').onclick=openTg;
 
 /* ---------- API keys ---------- */
 async function loadKeys(newKey){
