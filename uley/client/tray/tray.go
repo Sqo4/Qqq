@@ -54,6 +54,7 @@ func Run(app App) {
 
 var stateText = map[string]string{
 	protocol.StateWorking:     "работает",
+	protocol.StateChain:       "в общей модели",
 	protocol.StatePaused:      "пауза",
 	protocol.StatePreparing:   "готовится",
 	protocol.StateUnsupported: "видеокарта не подходит",
@@ -86,7 +87,7 @@ func onReady(app App) {
 		mStatus.SetTitle("Улей: " + text)
 		systray.SetTooltip("Улей: " + text + "\n" + st.Reason)
 		mJobs.SetTitle(fmt.Sprintf("Выполнено задач: %d", st.JobsDone))
-		systray.SetIcon(icon(st.State == protocol.StateWorking))
+		systray.SetIcon(icon(st.State == protocol.StateWorking || st.State == protocol.StateChain))
 		switch {
 		case s.Consent < config.ConsentVersion:
 			mToggle.SetTitle("Подключиться…")

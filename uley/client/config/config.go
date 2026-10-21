@@ -11,7 +11,7 @@ import (
 
 // ConsentVersion is bumped whenever what the client does changes in a way
 // the user should agree to again.
-const ConsentVersion = 1
+const ConsentVersion = 2 // 2: lending the GPU to a chain running one big model
 
 type Settings struct {
 	Coordinator string `json:"coordinator"`

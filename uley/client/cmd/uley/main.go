@@ -107,6 +107,11 @@ func main() {
 		ModelsDir:     modelsDir(dir),
 		AllowInsecure: *insecure,
 	}
+	if !*fake {
+		if bin := engine.FindRPCServer(enginePath); bin != "" {
+			ag.RPC = &engine.RPCServer{Bin: bin, CacheDir: filepath.Join(filepath.Dir(modelsDir(dir)), "chain-cache"), LogDir: filepath.Join(dir, "logs")}
+		}
+	}
 	if *fake {
 		// The emulator needs no model files.
 		ag.Fetch = func(ctx context.Context, m models.Model, p download.Progress) (string, error) { return m.File, nil }
@@ -265,7 +270,11 @@ const termsText = `Улей — добровольная распределён�
 
 Программа использует видеокарту этого компьютера, чтобы отвечать на
 текстовые запросы к открытым языковым моделям:
-  * скачивает модель только из встроенного списка и проверяет SHA-256;
+  * держит часть одной большой общей модели улья (Qwen3 32B): сервер Улья
+    передаёт на видеокарту её слои и по ним считает ответы. Доступ к этому
+    есть только у сервера Улья, через соединение, которое открывает сама
+    программа; на диске хранится до нескольких ГБ кэша весов;
+  * или скачивает модель только из встроенного списка и проверяет SHA-256;
   * получает текстовые задания с координатора по HTTPS и возвращает ответы;
   * отправляет только модель и объём памяти видеокарты, ОС и статус задач;
   * не запускает чужие программы и не майнит;

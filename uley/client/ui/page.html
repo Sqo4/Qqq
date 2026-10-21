@@ -13,7 +13,7 @@ ul{padding-left:20px;margin:8px 0}li{margin:4px 0}.muted{color:var(--muted);font
 button{background:var(--honey);color:#1b1400;border:0;border-radius:10px;padding:11px 18px;font:inherit;font-weight:700;cursor:pointer}
 button.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:400}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.state{font-size:22px;font-weight:700}.state.working{color:var(--ok)}.state.paused{color:var(--warn)}
+.state{font-size:22px;font-weight:700}.state.working,.state.chain{color:var(--ok)}.state.paused{color:var(--warn)}
 label.opt{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)}label.opt:last-child{border:0}
 label.opt input[type=checkbox]{width:20px;height:20px;margin-top:2px;accent-color:var(--honey);flex:none}
 .range{padding:10px 0;border-bottom:1px solid var(--line)}.range input{width:100%;accent-color:var(--honey)}
@@ -33,8 +33,9 @@ details summary{cursor:pointer;color:var(--muted)}.hidden{display:none}.err{colo
   <p>Улей — добровольная распределённая нейросеть. Эта программа будет использовать видеокарту вашего компьютера, чтобы отвечать на текстовые запросы к открытым языковым моделям. Пока вы не согласитесь, программа ничего не делает и никуда не подключается.</p>
   <h2>Что она будет делать</h2>
   <ul>
-   <li>Скачает одну модель из встроенного проверенного списка (Qwen3, от 0,6 до 5 ГБ). Файл проверяется по контрольной сумме SHA-256.</li>
-   <li>Будет получать с сервера Улья текстовые задания, считать ответы на видеокарте и отправлять их обратно.</li>
+   <li>Видеокарта станет частью <b>одной большой общей модели</b> улья (Qwen3 32B): модель делится на части, и ваш компьютер держит одну из них. Сервер Улья передаст на видеокарту её часть (несколько ГБ, сохраняется в кэш) и будет присылать вычисления по ней.</li>
+   <li>Подключаться к этим вычислениям может только сервер Улья — через защищённое соединение, которое открывает сама программа. Снаружи к компьютеру никто подключиться не может.</li>
+   <li>Если улей работает в режиме маленьких моделей, программа скачает одну модель из встроенного проверенного списка (Qwen3, от 0,6 до 5 ГБ) и проверит её контрольную сумму.</li>
    <li>Отправит на сервер только модель и объём памяти видеокарты, тип системы и статус задач. Имя компьютера, файлы и другие данные никуда не уходят.</li>
    <li>Не запускает чужие программы и не майнит криптовалюту. Связь с сервером идёт только по защищённому каналу HTTPS.</li>
   </ul>
@@ -95,7 +96,7 @@ details summary{cursor:pointer;color:var(--muted)}.hidden{display:none}.err{colo
 const $=id=>document.getElementById(id);let S=null,editing=false;
 async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Uley':'1'},body:JSON.stringify(body)});
  if(!r.ok)throw new Error(await r.text());return r.json()}
-const stateNames={working:'Работает',paused:'Пауза',preparing:'Готовимся',unsupported:'Не подходит'};
+const stateNames={working:'Работает',chain:'В общей модели',paused:'Пауза',preparing:'Готовимся',unsupported:'Не подходит'};
 function fmt(n){return new Intl.NumberFormat('ru-RU').format(n)}
 function render(s){S=s;$('ver').textContent='версия '+s.version;
  $('consent').classList.toggle('hidden',!s.consent_needed);$('panel').classList.toggle('hidden',s.consent_needed);

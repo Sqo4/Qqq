@@ -65,7 +65,11 @@ def main():
         for f in files:
             if f.startswith("LICENSE") and not os.path.exists(os.path.join(out, "LICENSE-llama.cpp")):
                 shutil.copy2(os.path.join(root, f), os.path.join(out, "LICENSE-llama.cpp"))
-    os.chmod(os.path.join(out, os.path.basename(server)), 0o755)
+    for f in os.listdir(out):
+        if f.endswith("-server") or f.endswith("-server.exe"):
+            os.chmod(os.path.join(out, f), 0o755)
+    if not any("rpc-server" in f for f in os.listdir(out)):
+        print("WARNING: this build has no rpc-server; the big shared model will not work")
     with open(os.path.join(out, "ENGINE_VERSION.txt"), "w") as fh:
         fh.write(f"llama.cpp {tag}\n{asset['name']}\nsha256 {digest}\n")
     print("engine files:", ", ".join(sorted(os.listdir(out))))
