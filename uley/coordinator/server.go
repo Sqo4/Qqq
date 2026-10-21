@@ -43,6 +43,9 @@ type Config struct {
 	HiveModel string
 	// Chain, if set, runs HiveModel as a chain of volunteer GPUs.
 	Chain *ChainManager
+	// SignupKey, if set, is required to create an account (e.g. a
+	// university running its own hive).
+	SignupKey string
 }
 
 func (c *Config) defaults() {
@@ -58,16 +61,18 @@ func (c *Config) defaults() {
 }
 
 type Server struct {
-	store *Store
-	cfg   Config
-	bell  *notifier
-	mux   *http.ServeMux
-	regs  *rateLimiter
+	store  *Store
+	cfg    Config
+	bell   *notifier
+	mux    *http.ServeMux
+	regs   *rateLimiter
+	logins *rateLimiter
+	events *hub
 }
 
 func NewServer(store *Store, cfg Config) *Server {
 	cfg.defaults()
-	s := &Server{store: store, cfg: cfg, bell: newNotifier(), mux: http.NewServeMux(), regs: newRateLimiter(20, time.Hour)}
+	s := &Server{store: store, cfg: cfg, bell: newNotifier(), mux: http.NewServeMux(), regs: newRateLimiter(20, time.Hour), logins: newRateLimiter(30, 10*time.Minute), events: newHub()}
 	p := protocol.APIPrefix
 	s.mux.HandleFunc("POST "+p+"/nodes/register", s.handleRegister)
 	s.mux.HandleFunc("POST "+p+"/nodes/heartbeat", s.nodeAuth(s.handleHeartbeat))
@@ -79,6 +84,7 @@ func NewServer(store *Store, cfg Config) *Server {
 	s.mux.HandleFunc("GET "+p+"/stats", s.handleStats)
 	s.mux.HandleFunc("GET "+p+"/models", s.handleModels)
 	s.mux.HandleFunc("GET "+p+"/hive", s.handleHive)
+	s.registerSocial()
 	if cfg.Chain != nil {
 		cfg.Chain.bell = s.bell
 		cfg.Chain.timeout = max(cfg.JobTimeout, 15*time.Minute) // a chain writes slower
@@ -105,6 +111,7 @@ func (s *Server) Run(ctx context.Context) {
 	if s.cfg.Chain != nil {
 		go s.cfg.Chain.Run(ctx)
 	}
+	go s.runLive(ctx)
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {

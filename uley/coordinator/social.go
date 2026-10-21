@@ -471,26 +471,35 @@ func (s *Store) SetMessageTask(id int64, taskID string) error {
 const msgColumns = `m.id, m.chat_id, m.user_id, COALESCE(u.name, 'Улей'), m.role, m.content, m.status, m.project_ref, m.created_at`
 
 func (s *Store) scanMessages(rows *sql.Rows, viewerID string) ([]Message, error) {
-	defer rows.Close()
 	out := []Message{}
+	var refs []string
 	for rows.Next() {
 		var m Message
 		var ref string
 		if err := rows.Scan(&m.ID, &m.ChatID, &m.UserID, &m.AuthorName, &m.Role, &m.Content, &m.Status, &ref, &m.CreatedAt); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		if m.UserID == "" {
 			m.AuthorName = "Улей"
 		}
-		if ref != "" {
-			if p, err := s.GetProject(ref, viewerID); err == nil {
-				p.Members = nil
-				m.Project = &p
-			}
-		}
 		out = append(out, m)
+		refs = append(refs, ref)
 	}
-	return out, rows.Err()
+	rows.Close() // the store has one connection: close before the next query
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, ref := range refs {
+		if ref == "" {
+			continue
+		}
+		if p, err := s.GetProject(ref, viewerID); err == nil {
+			p.Members, p.InviteCode = nil, ""
+			out[i].Project = &p
+		}
+	}
+	return out, nil
 }
 
 // Messages returns up to limit messages before beforeID (0 = newest), oldest first.
