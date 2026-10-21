@@ -42,6 +42,8 @@ type App struct {
 	Agent     *agent.Agent
 	Config    *config.Store
 	OpenPanel func()
+	// OpenHive opens the hive's web app: chats, projects, live power.
+	OpenHive func()
 	// UpdateAvailable returns a newer version or "".
 	UpdateAvailable func() string
 	OnQuit          func()
@@ -71,7 +73,8 @@ func onReady(app App) {
 	mJobs.Disable()
 	systray.AddSeparator()
 	mToggle := systray.AddMenuItem("Пауза", "Остановить или продолжить работу")
-	mPanel := systray.AddMenuItem("Настройки и статистика", "Открыть панель Улья")
+	mHive := systray.AddMenuItem("Открыть Улей: чаты и проекты", "Чаты с нейросетью, проекты, мощности в прямом эфире")
+	mPanel := systray.AddMenuItem("Настройки этого компьютера", "Открыть панель Улья")
 	mUpdate := systray.AddMenuItem("", "")
 	mUpdate.Hide()
 	systray.AddSeparator()
@@ -118,6 +121,8 @@ func onReady(app App) {
 				app.Config.Update(func(s *config.Settings) { s.Paused = !s.Paused })
 				app.Agent.Kick()
 				refresh()
+			case <-mHive.ClickedCh:
+				app.OpenHive()
 			case <-mPanel.ClickedCh:
 				app.OpenPanel()
 			case <-mUpdate.ClickedCh:

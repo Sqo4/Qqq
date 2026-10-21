@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -166,7 +167,12 @@ func main() {
 		<-ctx.Done()
 		quitTray()
 	}()
-	tray.Run(tray.App{Agent: ag, Config: cfg, OpenPanel: open, UpdateAvailable: upd.available, OnQuit: shutdown})
+	openHive := func() {
+		if err := ui.OpenBrowser(strings.TrimRight(cfg.Get().Coordinator, "/") + "/"); err != nil {
+			log.Print(err)
+		}
+	}
+	tray.Run(tray.App{Agent: ag, Config: cfg, OpenPanel: open, OpenHive: openHive, UpdateAvailable: upd.available, OnQuit: shutdown})
 }
 
 // modelsDir keeps gigabytes of models in the local cache folder, never in

@@ -148,7 +148,8 @@ func (a *Agent) pauseReason(s config.Settings) string {
 	return ""
 }
 
-// CheckCoordinatorURL enforces HTTPS for anything but this computer.
+// CheckCoordinatorURL enforces HTTPS for anything outside this computer
+// and the local network.
 func CheckCoordinatorURL(raw string, allowInsecure bool) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -159,11 +160,16 @@ func CheckCoordinatorURL(raw string, allowInsecure bool) error {
 		return nil
 	case "http":
 		host := u.Hostname()
-		if ip := net.ParseIP(host); host == "localhost" || (ip != nil && ip.IsLoopback()) || allowInsecure {
+		ip := net.ParseIP(host)
+		switch {
+		case host == "localhost" || (ip != nil && ip.IsLoopback()) || allowInsecure:
+			return nil
+		case ip != nil && ip.IsPrivate(), strings.HasSuffix(host, ".local"):
+			// A hive inside a classroom or dorm network (local build).
 			return nil
 		}
 	}
-	return errors.New("координатор должен быть доступен по https://")
+	return errors.New("координатор в интернете должен быть доступен по https://")
 }
 
 // Run works until ctx is cancelled.

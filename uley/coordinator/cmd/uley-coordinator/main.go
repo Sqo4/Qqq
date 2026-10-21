@@ -83,6 +83,7 @@ func main() {
 	domain := flag.String("domain", env("ULEY_DOMAIN", ""), "public domain; enables automatic HTTPS via Let's Encrypt")
 	dbPath := flag.String("db", env("ULEY_DB", "uley.db"), "SQLite database file")
 	apiKeys := flag.String("api-keys", env("ULEY_API_KEYS", ""), "comma separated API keys allowed to submit tasks (empty = open, for testing only)")
+	signupKey := flag.String("signup-key", env("ULEY_SIGNUP_KEY", ""), "optional code people must enter to create an account (e.g. for a university)")
 	joinKey := flag.String("join-key", env("ULEY_JOIN_KEY", ""), "optional key nodes must know to register")
 	verify := flag.Float64("verify-rate", 0.1, "share of temperature-0 tasks computed twice for verification")
 	jobTimeout := flag.Duration("job-timeout", 3*time.Minute, "time a node has to finish a job")
@@ -115,7 +116,7 @@ func main() {
 
 	cfg := coordinator.Config{
 		APIKeys: keys, JoinKey: *joinKey, VerifyRate: *verify, JobTimeout: *jobTimeout, Web: web.FS,
-		HiveModel: model.ID,
+		HiveModel: model.ID, SignupKey: *signupKey,
 	}
 	if model.Chain {
 		head := *headBin

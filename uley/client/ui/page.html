@@ -66,6 +66,7 @@ details summary{cursor:pointer;color:var(--muted)}.hidden{display:none}.err{colo
   </div>
   <p class="muted" id="gpus"></p>
   <div id="upd" class="hidden"><button id="updbtn"></button></div>
+  <p><a id="hiveLink" href="#" target="_blank" rel="noopener">Открыть Улей: чаты, проекты и мощности в прямом эфире →</a></p>
  </div>
 
  <div class="card">
@@ -112,6 +113,7 @@ function render(s){S=s;$('ver').textContent='версия '+s.version;
  $('upd').classList.toggle('hidden',!s.update);$('updbtn').textContent='Установить обновление '+s.update;
  if(!editing){for(const el of document.querySelectorAll('[data-k]')){const v=s.settings[el.dataset.k];
   if(el.type==='checkbox')el.checked=!!v;else if(el.tagName==='SELECT'){fillModels(el,s);el.value=v||''}else if(document.activeElement!==el)el.value=v}}
+ $('hiveLink').href=s.settings.coordinator.replace(/\/+$/,'')+'/';
  $('gpuv').textContent=s.settings.max_gpu_percent+'%';$('vramv').textContent=s.settings.max_vram_percent+'%'}
 function fillModels(sel,s){if(sel.options.length)return;const a=new Option('Автоматически (самая большая, что помещается)','');sel.add(a);
  for(const m of s.models)sel.add(new Option(m.name+' — нужно '+(m.min_vram_mb/1024).toFixed(1)+' ГБ'+(m.fits?'':' (не поместится)'),m.id))}
