@@ -1,0 +1,27 @@
+# systemd unit for the Uley coordinator on a VPS.
+#   sudo useradd --system --home /var/lib/uley --create-home uley
+#   sudo cp uley-coordinator-linux-amd64 /usr/local/bin/uley-coordinator
+#   sudo cp uley-coordinator.service /etc/systemd/system/ && sudo systemctl enable --now uley-coordinator
+# Edit ULEY_DOMAIN and ULEY_API_KEYS first. The domain's DNS A record must
+# point at the server; ports 80 and 443 must be open.
+[Unit]
+Description=Uley coordinator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=uley
+Environment=ULEY_DOMAIN=hive.example.org
+Environment=ULEY_DB=/var/lib/uley/uley.db
+Environment=ULEY_API_KEYS=change-me-long-random-key
+ExecStart=/usr/local/bin/uley-coordinator
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/uley
+PrivateTmp=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

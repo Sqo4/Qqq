@@ -104,7 +104,7 @@ func main() {
 	ag := &agent.Agent{
 		Config: cfg, Engine: eng, Monitor: sysmon.System{}, Version: version,
 		DetectGPU:     func() []protocol.GPU { return gpu.Detect(enginePath) },
-		ModelsDir:     filepath.Join(dir, "models"),
+		ModelsDir:     modelsDir(dir),
 		AllowInsecure: *insecure,
 	}
 	if *fake {
@@ -162,6 +162,17 @@ func main() {
 		quitTray()
 	}()
 	tray.Run(tray.App{Agent: ag, Config: cfg, OpenPanel: open, UpdateAvailable: upd.available, OnQuit: shutdown})
+}
+
+// modelsDir keeps gigabytes of models in the local cache folder, never in
+// the roaming profile that Windows may sync between computers.
+func modelsDir(configDir string) string {
+	if os.Getenv("ULEY_HOME") == "" {
+		if c, err := os.UserCacheDir(); err == nil {
+			return filepath.Join(c, "Uley", "models")
+		}
+	}
+	return filepath.Join(configDir, "models")
 }
 
 func setupLog(dir string, toStderr bool) {

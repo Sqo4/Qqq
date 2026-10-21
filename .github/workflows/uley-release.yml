@@ -1,0 +1,201 @@
+# Builds the Uley installers. On a tag like uley-v0.1.0 it also publishes a
+# GitHub Release with them. On pushes to the uley development branch it only
+# builds (to check that packaging works) and keeps the files as artifacts.
+#
+# Repository settings used (Settings → Secrets and variables → Actions):
+#   vars.ULEY_COORDINATOR_URL       https://address of the coordinator baked into the client
+#   vars.ULEY_UPDATE_PUBLIC_KEY     public key for signed updates (uley-sign keygen)
+#   secrets.ULEY_UPDATE_PRIVATE_KEY private key for signed updates
+#   secrets.WINDOWS_CERT_PFX_BASE64 code signing certificate (.pfx, base64), optional
+#   secrets.WINDOWS_CERT_PASSWORD   its password
+name: uley-release
+
+on:
+  push:
+    tags: ["uley-v*"]
+    branches: ["claude/uley"]
+    paths: ["uley/installer/**", "uley/client/**", ".github/workflows/uley-release.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  COORDINATOR_URL: ${{ vars.ULEY_COORDINATOR_URL || 'http://127.0.0.1:8080' }}
+  UPDATE_PUBLIC_KEY: ${{ vars.ULEY_UPDATE_PUBLIC_KEY }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      engine: ${{ steps.v.outputs.engine }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/uley-v* ]]; then v="${GITHUB_REF#refs/tags/uley-v}"; else v="0.0.0-dev.${GITHUB_RUN_NUMBER}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "engine=$(cat uley/installer/llama-cpp-version.txt)" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      HAS_CERT: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      GITHUB_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: uley
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: uley/go.mod
+          cache-dependency-path: uley/go.sum
+      - name: Fetch llama.cpp (Vulkan build for NVIDIA, AMD and Intel)
+        shell: bash
+        run: python installer/fetch_engine.py "${{ needs.version.outputs.engine }}" 'llama-.*-bin-win-vulkan-x64\.zip' dist/windows/engine | tee engine.txt
+      - name: Build uley.exe
+        shell: bash
+        run: |
+          go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$VERSION -X main.defaultCoordinator=$COORDINATOR_URL -X main.updatePublicKey=$UPDATE_PUBLIC_KEY" -o dist/windows/uley.exe ./client/cmd/uley
+          cp installer/NOTICE.txt dist/windows/
+      - name: Sign uley.exe
+        if: env.HAS_CERT == 'true'
+        shell: pwsh
+        run: ./installer/windows/sign.ps1 dist/windows/uley.exe
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Build installer
+        shell: pwsh
+        working-directory: uley/installer/windows
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $isccArgs = @("/DAppVersion=$env:VERSION", "/DSourceDir=..\..\dist\windows")
+          if ($env:HAS_CERT -eq 'true') {
+            $sign = "powershell -ExecutionPolicy Bypass -File `"$PWD\sign.ps1`" `$f"
+            $isccArgs += @("/DSign", "/Suleysign=$sign")
+          }
+          & $iscc @isccArgs uley.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            uley/dist/Uley-Setup-windows-x64.exe
+            uley/engine.txt
+
+  linux:
+    needs: version
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GITHUB_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: uley
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: uley/go.mod
+          cache-dependency-path: uley/go.sum
+      - name: Fetch llama.cpp (Vulkan build)
+        run: python3 installer/fetch_engine.py "${{ needs.version.outputs.engine }}" 'llama-.*-bin-ubuntu-vulkan-x64\.(zip|tar\.gz)' dist/stage/engine | tee engine.txt
+      - name: Build
+        run: |
+          LD="-s -w -X main.version=$VERSION -X main.defaultCoordinator=$COORDINATOR_URL -X main.updatePublicKey=$UPDATE_PUBLIC_KEY"
+          CGO_ENABLED=0 go build -trimpath -ldflags "$LD" -o dist/stage/uley ./client/cmd/uley
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o dist/out/uley-coordinator-linux-$arch ./coordinator/cmd/uley-coordinator
+          done
+      - name: Package .deb and .tar.gz
+        run: bash installer/linux/build-packages.sh "$VERSION" dist/stage dist/out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            uley/dist/out/*
+            uley/engine.txt
+
+  macos:
+    needs: version
+    runs-on: macos-14
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GITHUB_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: uley
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: uley/go.mod
+          cache-dependency-path: uley/go.sum
+      - name: Fetch llama.cpp (Metal build)
+        run: python3 installer/fetch_engine.py "${{ needs.version.outputs.engine }}" 'llama-.*-bin-macos-arm64\.(zip|tar\.gz)' dist/stage/engine | tee engine.txt
+      - name: Build
+        run: CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.defaultCoordinator=$COORDINATOR_URL -X main.updatePublicKey=$UPDATE_PUBLIC_KEY" -o dist/stage/uley ./client/cmd/uley
+      - name: Package .dmg
+        run: bash installer/macos/build-dmg.sh "$VERSION" dist/stage dist/out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            uley/dist/out/Uley-macos-arm64.dmg
+            uley/engine.txt
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/uley-v')
+    needs: [version, windows, linux, macos]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      ULEY_UPDATE_PRIVATE_KEY: ${{ secrets.ULEY_UPDATE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: uley/go.mod
+          cache-dependency-path: uley/go.sum
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect files, checksums and signed update manifests
+        run: |
+          mkdir -p out
+          cp artifacts/windows/dist/Uley-Setup-windows-x64.exe out/
+          cp artifacts/linux/dist/out/* out/
+          cp artifacts/macos/dist/out/Uley-macos-arm64.dmg out/
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          if [ -n "$ULEY_UPDATE_PRIVATE_KEY" ]; then
+            cd uley
+            go run ./tools/uley-sign sign -version "$VERSION" -os windows -arch amd64 -url "$base/Uley-Setup-windows-x64.exe" -file ../out/Uley-Setup-windows-x64.exe > ../out/update-windows-amd64.json
+            go run ./tools/uley-sign sign -version "$VERSION" -os linux -arch amd64 -url "$base/uley_linux_amd64.deb" -file ../out/uley_linux_amd64.deb > ../out/update-linux-amd64.json
+            go run ./tools/uley-sign sign -version "$VERSION" -os darwin -arch arm64 -url "$base/Uley-macos-arm64.dmg" -file ../out/Uley-macos-arm64.dmg > ../out/update-darwin-arm64.json
+            cd ..
+          fi
+          (cd out && sha256sum * > SHA256SUMS.txt)
+          {
+            echo "## Улей $VERSION"
+            echo
+            echo "Скачайте установщик для своей системы. Windows: **Uley-Setup-windows-x64.exe**."
+            echo
+            echo "Движок: llama.cpp ${{ needs.version.outputs.engine }} (Vulkan/Metal)."
+            echo '```'
+            cat artifacts/*/engine.txt | grep '^sha256' || true
+            echo '```'
+          } > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Улей ${{ env.VERSION }}
+          body_path: notes.md
+          files: out/*
+          make_latest: true

@@ -1,0 +1,41 @@
+# Tests for the Uley project (folder uley/). Runs on every push that touches it.
+name: uley-ci
+
+on:
+  push:
+    paths: ["uley/**", ".github/workflows/uley-*.yml"]
+  pull_request:
+    paths: ["uley/**", ".github/workflows/uley-*.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: uley
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: uley/go.mod
+          cache-dependency-path: uley/go.sum
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+        if: runner.os != 'Windows'
+      - run: go test ./...
+        if: runner.os == 'Windows'
+      - name: Build client and coordinator
+        run: |
+          go build ./client/cmd/uley
+          go build ./coordinator/cmd/uley-coordinator
