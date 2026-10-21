@@ -260,7 +260,9 @@ func (a *Agent) step(ctx context.Context) error {
 	defer cancel()
 
 	if a.Engine.Loaded() != m.ID {
-		a.update(func(st *Status) { st.State, st.Reason, st.Model = protocol.StatePreparing, "Скачиваем модель "+m.Name, "" })
+		a.update(func(st *Status) {
+			st.State, st.Reason, st.Model = protocol.StatePreparing, "Скачиваем модель "+m.Name, ""
+		})
 		path, err := a.Fetch(work, m, func(done, total int64) {
 			a.update(func(st *Status) { st.Download = float64(done) / float64(total) })
 		})
@@ -400,15 +402,15 @@ func (a *Agent) poll(ctx context.Context, model string) (*protocol.Job, error) {
 }
 
 func (a *Agent) heartbeatLoop(ctx context.Context) {
-	t := time.NewTicker(a.HeartbeatEvery)
-	defer t.Stop()
 	lastGPU := time.Now()
+	wait := min(2*time.Second, a.HeartbeatEvery) // report soon after start
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-time.After(wait):
 		}
+		wait = a.HeartbeatEvery
 		if time.Since(lastGPU) > time.Hour {
 			a.refreshGPUs()
 			lastGPU = time.Now()

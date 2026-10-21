@@ -229,12 +229,12 @@ func TestValidateJob(t *testing.T) {
 
 func TestCoordinatorMustUseHTTPS(t *testing.T) {
 	for raw, ok := range map[string]bool{
-		"https://hive.example.org":  true,
-		"http://127.0.0.1:8080":     true,
-		"http://localhost:8080":     true,
-		"http://hive.example.org":   false,
-		"ftp://hive.example.org":    false,
-		"hive.example.org":          false,
+		"https://hive.example.org": true,
+		"http://127.0.0.1:8080":    true,
+		"http://localhost:8080":    true,
+		"http://hive.example.org":  false,
+		"ftp://hive.example.org":   false,
+		"hive.example.org":         false,
 	} {
 		if err := CheckCoordinatorURL(raw, false); (err == nil) != ok {
 			t.Errorf("%s: got %v", raw, err)

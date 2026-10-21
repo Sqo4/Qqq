@@ -51,7 +51,7 @@ func FindLlamaServer() string {
 		dir := filepath.Dir(exe)
 		for _, p := range []string{
 			filepath.Join(dir, "engine", name),
-			filepath.Join(dir, "..", "Resources", "engine", name), // macOS .app bundle
+			filepath.Join(dir, "..", "Resources", "engine", name),   // macOS .app bundle
 			filepath.Join(dir, "..", "lib", "uley", "engine", name), // .deb layout
 		} {
 			if _, err := os.Stat(p); err == nil {

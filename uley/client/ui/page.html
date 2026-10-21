@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Улей</title>
+<style>
+:root{--bg:#14110c;--card:#1f1a12;--line:#3a2f1d;--text:#f3ead8;--muted:#b3a589;--honey:#f5b301;--ok:#7bd88f;--warn:#ffb86b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 64px}h1{margin:0 0 16px;font-size:26px}h1 span{color:var(--honey)}
+h2{font-size:19px;margin:0 0 10px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+ul{padding-left:20px;margin:8px 0}li{margin:4px 0}.muted{color:var(--muted);font-size:14px}
+button{background:var(--honey);color:#1b1400;border:0;border-radius:10px;padding:11px 18px;font:inherit;font-weight:700;cursor:pointer}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:400}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.state{font-size:22px;font-weight:700}.state.working{color:var(--ok)}.state.paused{color:var(--warn)}
+label.opt{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)}label.opt:last-child{border:0}
+label.opt input[type=checkbox]{width:20px;height:20px;margin-top:2px;accent-color:var(--honey);flex:none}
+.range{padding:10px 0;border-bottom:1px solid var(--line)}.range input{width:100%;accent-color:var(--honey)}
+select,input[type=text],input[type=number]{background:#0f0c08;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%}
+.bar{height:8px;background:#0f0c08;border-radius:4px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:var(--honey)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}.stats b{display:block;font-size:22px;color:var(--honey)}
+details summary{cursor:pointer;color:var(--muted)}.hidden{display:none}.err{color:#ff8a7a}
+</style>
+</head>
+<body>
+<main>
+<h1>🐝 <span>Улей</span> <small class="muted" id="ver"></small></h1>
+
+<section id="consent" class="hidden">
+ <div class="card">
+  <h2>Прежде чем начать</h2>
+  <p>Улей — добровольная распределённая нейросеть. Эта программа будет использовать видеокарту вашего компьютера, чтобы отвечать на текстовые запросы к открытым языковым моделям. Пока вы не согласитесь, программа ничего не делает и никуда не подключается.</p>
+  <h2>Что она будет делать</h2>
+  <ul>
+   <li>Скачает одну модель из встроенного проверенного списка (Qwen3, от 0,6 до 5 ГБ). Файл проверяется по контрольной сумме SHA-256.</li>
+   <li>Будет получать с сервера Улья текстовые задания, считать ответы на видеокарте и отправлять их обратно.</li>
+   <li>Отправит на сервер только модель и объём памяти видеокарты, тип системы и статус задач. Имя компьютера, файлы и другие данные никуда не уходят.</li>
+   <li>Не запускает чужие программы и не майнит криптовалюту. Связь с сервером идёт только по защищённому каналу HTTPS.</li>
+  </ul>
+  <h2>Сколько ресурсов</h2>
+  <ul>
+   <li>По умолчанию работает, только когда за компьютером никого нет 3 минуты, и сразу останавливается, когда вы возвращаетесь.</li>
+   <li>Встаёт на паузу при запуске полноэкранной игры и при работе ноутбука от батареи. Видеопамять при этом освобождается.</li>
+   <li>Берёт не больше 70% видеопамяти и работает не больше 70% времени (видеокарта отдыхает между задачами). Всё это можно изменить ниже.</li>
+   <li>Пока видеокарта считает, она греется и потребляет электричество, как в игре.</li>
+   <li>Автозапуск выключен. Остановить работу можно в любой момент значком в трее.</li>
+  </ul>
+  <div class="row"><button id="accept">Согласен, подключиться к Улью</button><button class="ghost" id="decline">Не сейчас</button></div>
+ </div>
+</section>
+
+<section id="panel" class="hidden">
+ <div class="card">
+  <div class="row" style="justify-content:space-between">
+   <div><div id="state" class="state"></div><div id="reason" class="muted"></div></div>
+   <button id="toggle"></button>
+  </div>
+  <div id="dl" class="hidden"><div class="bar"><i id="dlbar"></i></div><div class="muted" id="dltext"></div></div>
+  <div id="err" class="err muted"></div>
+  <div class="stats">
+   <div><b id="jobs">0</b><span class="muted">задач выполнено</span></div>
+   <div><b id="tokens">0</b><span class="muted">слов (токенов) написано</span></div>
+   <div><b id="model">—</b><span class="muted">модель</span></div>
+  </div>
+  <p class="muted" id="gpus"></p>
+  <div id="upd" class="hidden"><button id="updbtn"></button></div>
+ </div>
+
+ <div class="card">
+  <h2>Когда работать</h2>
+  <label class="opt"><input type="checkbox" data-k="idle_only"><span>Только когда компьютер простаивает<br><span class="muted">Мышь и клавиатура не трогали <input type="number" min="1" max="120" data-k="idle_minutes" style="width:70px;display:inline-block"> мин.</span><br><span class="muted hidden" id="idleunk">На этой системе не удалось узнать время простоя, поэтому эта настройка не действует.</span></span></label>
+  <label class="opt"><input type="checkbox" data-k="pause_on_fullscreen"><span>Пауза, когда запущена полноэкранная игра или видео</span></label>
+  <label class="opt"><input type="checkbox" data-k="pause_on_battery"><span>Пауза, когда ноутбук работает от батареи</span></label>
+  <label class="opt" id="autorow"><input type="checkbox" data-k="autostart"><span>Запускать Улей вместе с компьютером</span></label>
+ </div>
+
+ <div class="card">
+  <h2>Сколько ресурсов отдавать</h2>
+  <div class="range">Нагрузка на видеокарту: <b id="gpuv"></b><input type="range" min="10" max="100" step="5" data-k="max_gpu_percent"><span class="muted">Доля времени, когда видеокарта считает. Остальное время она отдыхает.</span></div>
+  <div class="range">Видеопамять: <b id="vramv"></b><input type="range" min="10" max="95" step="5" data-k="max_vram_percent"><span class="muted">От этого зависит, какая модель поместится.</span></div>
+  <div class="range" style="border:0">Модель<select data-k="model"></select></div>
+ </div>
+
+ <div class="card">
+  <details><summary>Дополнительно</summary>
+   <p>Имя узла (видно на сервере, необязательно)<input type="text" data-k="node_name" maxlength="64" placeholder="например, Вовин комп"></p>
+   <p>Адрес координатора<input type="text" data-k="coordinator"></p>
+   <p><button class="ghost" id="withdraw">Отозвать согласие и остановить</button></p>
+  </details>
+ </div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let S=null,editing=false;
+async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Uley':'1'},body:JSON.stringify(body)});
+ if(!r.ok)throw new Error(await r.text());return r.json()}
+const stateNames={working:'Работает',paused:'Пауза',preparing:'Готовимся',unsupported:'Не подходит'};
+function fmt(n){return new Intl.NumberFormat('ru-RU').format(n)}
+function render(s){S=s;$('ver').textContent='версия '+s.version;
+ $('consent').classList.toggle('hidden',!s.consent_needed);$('panel').classList.toggle('hidden',s.consent_needed);
+ const st=s.status;$('state').textContent=stateNames[st.state]||st.state;$('state').className='state '+st.state;
+ $('reason').textContent=st.reason+(st.connected?'':' · нет связи с сервером');
+ $('toggle').textContent=s.settings.paused?'▶ Продолжить':'⏸ Пауза';
+ $('jobs').textContent=fmt(st.jobs_done);$('tokens').textContent=fmt(st.tokens_out);
+ const m=s.models.find(m=>m.id===st.model);$('model').textContent=m?m.name:'—';
+ $('gpus').textContent=(st.gpus||[]).length?'Видеокарты: '+st.gpus.map(g=>g.name+' ('+(g.vram_mb/1024).toFixed(1)+' ГБ)').join(', ')+'. Улью доступно '+(st.vram_budget_mb/1024).toFixed(1)+' ГБ.':'Видеокарта не найдена.';
+ $('dl').classList.toggle('hidden',st.download<0);if(st.download>=0){$('dlbar').style.width=(st.download*100)+'%';$('dltext').textContent='Скачано '+Math.floor(st.download*100)+'%'}
+ $('err').textContent=st.last_error?'Последняя ошибка: '+st.last_error:'';
+ $('idleunk').classList.toggle('hidden',!st.idle_unknown);$('autorow').classList.toggle('hidden',!s.can_autostart);
+ $('upd').classList.toggle('hidden',!s.update);$('updbtn').textContent='Установить обновление '+s.update;
+ if(!editing){for(const el of document.querySelectorAll('[data-k]')){const v=s.settings[el.dataset.k];
+  if(el.type==='checkbox')el.checked=!!v;else if(el.tagName==='SELECT'){fillModels(el,s);el.value=v||''}else if(document.activeElement!==el)el.value=v}}
+ $('gpuv').textContent=s.settings.max_gpu_percent+'%';$('vramv').textContent=s.settings.max_vram_percent+'%'}
+function fillModels(sel,s){if(sel.options.length)return;const a=new Option('Автоматически (самая большая, что помещается)','');sel.add(a);
+ for(const m of s.models)sel.add(new Option(m.name+' — нужно '+(m.min_vram_mb/1024).toFixed(1)+' ГБ'+(m.fits?'':' (не поместится)'),m.id))}
+async function save(k,v){try{render(await api('/api/settings',{[k]:v}))}catch(e){alert(e.message)}}
+for(const el of document.querySelectorAll('[data-k]')){
+ el.addEventListener('change',()=>{const k=el.dataset.k;let v=el.type==='checkbox'?el.checked:(el.type==='range'||el.type==='number')?parseInt(el.value,10):el.value;editing=false;save(k,v)});
+ el.addEventListener('input',()=>{if(el.type==='range'){editing=true;$(el.dataset.k==='max_gpu_percent'?'gpuv':'vramv').textContent=el.value+'%'}})}
+$('accept').onclick=async()=>render(await api('/api/consent',{accept:true}));
+$('decline').onclick=()=>{document.body.innerHTML='<main><h1>Хорошо</h1><p>Улей ничего не делает. Если передумаете, откройте его из значка в трее.</p></main>'};
+$('withdraw').onclick=async()=>{if(confirm('Остановить работу и отозвать согласие?'))render(await api('/api/consent',{accept:false}))};
+$('toggle').onclick=()=>save('paused',!S.settings.paused);
+$('updbtn').onclick=async()=>{$('updbtn').disabled=true;$('updbtn').textContent='Скачиваем и проверяем подпись…';try{await api('/api/update',{})}catch(e){alert(e.message);$('updbtn').disabled=false}};
+async function loop(){try{render(await api('/api/state'))}catch(e){$('reason').textContent='Программа Улей закрыта'}setTimeout(loop,2000)}
+loop();
+</script>
+</body>
+</html>
