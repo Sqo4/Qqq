@@ -131,18 +131,27 @@ type Task struct {
 }
 
 type Stats struct {
-	NodesOnline  int            `json:"nodes_online"`
-	NodesWorking int            `json:"nodes_working"`
-	NodesTotal   int            `json:"nodes_total"`
-	VRAMOnlineMB int            `json:"vram_online_mb"`
-	TasksQueued  int            `json:"tasks_queued"`
-	TasksRunning int            `json:"tasks_running"`
-	TasksDone    int            `json:"tasks_done"`
-	TasksFailed  int            `json:"tasks_failed"`
-	TokensTotal  int64          `json:"tokens_total"`
-	TokensPerSec float64        `json:"tokens_per_sec"` // over the last 10 minutes
-	GPUVendors   map[string]int `json:"gpu_vendors"`
-	ModelsOnline map[string]int `json:"models_online"`
+	HiveModel     string         `json:"hive_model"`
+	NodesBusy     int            `json:"nodes_busy"`
+	CapacityTPS   float64        `json:"capacity_tps"` // tokens/s all working nodes can do
+	UsedTPS       float64        `json:"used_tps"`     // tokens/s of nodes busy right now
+	Utilization   float64        `json:"utilization"`  // 0..1 share of working nodes that are busy
+	UsersOnline   int            `json:"users_online"`
+	UsersTotal    int            `json:"users_total"`
+	ProjectsTotal int            `json:"projects_total"`
+	MessagesToday int            `json:"messages_today"`
+	NodesOnline   int            `json:"nodes_online"`
+	NodesWorking  int            `json:"nodes_working"`
+	NodesTotal    int            `json:"nodes_total"`
+	VRAMOnlineMB  int            `json:"vram_online_mb"`
+	TasksQueued   int            `json:"tasks_queued"`
+	TasksRunning  int            `json:"tasks_running"`
+	TasksDone     int            `json:"tasks_done"`
+	TasksFailed   int            `json:"tasks_failed"`
+	TokensTotal   int64          `json:"tokens_total"`
+	TokensPerSec  float64        `json:"tokens_per_sec"` // over the last 10 minutes
+	GPUVendors    map[string]int `json:"gpu_vendors"`
+	ModelsOnline  map[string]int `json:"models_online"`
 }
 
 type ErrorResponse struct {

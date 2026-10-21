@@ -92,7 +92,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + socialSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
@@ -510,21 +510,60 @@ const onlineWindow = 90 * time.Second
 func (s *Store) Stats() (protocol.Stats, error) {
 	st := protocol.Stats{GPUVendors: map[string]int{}, ModelsOnline: map[string]int{}}
 	since := s.now().Add(-onlineWindow).Unix()
-	rows, err := s.db.Query(`SELECT state, vram_mb, gpus, models FROM nodes WHERE last_seen>=? AND banned=0`, since)
+	// Measured speed of every node over the last day, in tokens/s.
+	speed := map[string]float64{}
+	srows, err := s.db.Query(`SELECT node_id, SUM(tokens_out)*1000.0/SUM(duration_ms) FROM assignments
+		WHERE status='done' AND duration_ms>0 AND finished_at>? GROUP BY node_id`, s.now().Unix()-86400)
+	if err != nil {
+		return st, err
+	}
+	for srows.Next() {
+		var id string
+		var v float64
+		srows.Scan(&id, &v)
+		speed[id] = v
+	}
+	srows.Close()
+	busy := map[string]bool{}
+	brows, err := s.db.Query(`SELECT DISTINCT node_id FROM assignments WHERE status='running'`)
+	if err != nil {
+		return st, err
+	}
+	for brows.Next() {
+		var id string
+		brows.Scan(&id)
+		busy[id] = true
+	}
+	brows.Close()
+	avg := 0.0
+	for _, v := range speed {
+		avg += v / float64(len(speed))
+	}
+
+	rows, err := s.db.Query(`SELECT id, state, vram_mb, gpus, models FROM nodes WHERE last_seen>=? AND banned=0`, since)
 	if err != nil {
 		return st, err
 	}
 	for rows.Next() {
-		var state, gpusRaw, modelsRaw string
+		var id, state, gpusRaw, modelsRaw string
 		var vram int
-		if err := rows.Scan(&state, &vram, &gpusRaw, &modelsRaw); err != nil {
+		if err := rows.Scan(&id, &state, &vram, &gpusRaw, &modelsRaw); err != nil {
 			rows.Close()
 			return st, err
 		}
 		st.NodesOnline++
 		st.VRAMOnlineMB += vram
-		if state == protocol.StateWorking {
+		if state == protocol.StateWorking || busy[id] {
 			st.NodesWorking++
+			v, ok := speed[id]
+			if !ok {
+				v = avg // not measured yet: assume an average node
+			}
+			st.CapacityTPS += v
+			if busy[id] {
+				st.NodesBusy++
+				st.UsedTPS += v
+			}
 		}
 		var gpus []protocol.GPU
 		json.Unmarshal([]byte(gpusRaw), &gpus)
@@ -558,6 +597,12 @@ func (s *Store) Stats() (protocol.Stats, error) {
 		return st, err
 	}
 	st.TokensPerSec = float64(recent) / float64(window)
+	if st.NodesWorking > 0 {
+		st.Utilization = float64(st.NodesBusy) / float64(st.NodesWorking)
+	}
+	s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&st.UsersTotal)
+	s.db.QueryRow(`SELECT COUNT(*) FROM projects`).Scan(&st.ProjectsTotal)
+	s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE created_at>?`, s.now().Unix()-86400).Scan(&st.MessagesToday)
 	return st, nil
 }
 
