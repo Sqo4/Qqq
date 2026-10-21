@@ -85,6 +85,7 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
  <div class="pill" id="pill" title="Мощности улья в прямом эфире"><span class="dot off" id="pillDot"></span><span><b id="pUsed">–</b> / <span id="pCap">–</span> ток/с</span><span class="opt muted">· <span id="pNodes">–</span> компьютеров</span></div>
  <div class="spacer"></div>
  <span id="who" class="small muted hidden"></span>
+ <button id="keysBtn" class="ghost hidden small" title="API-ключи и подключение Hermes Agent">🔑 API</button>
  <button id="logout" class="ghost hidden small">Выйти</button>
 </header>
 
@@ -169,6 +170,24 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
  <label>О чём проект</label><textarea id="pDesc" rows="3" maxlength="1000" placeholder="Например: курсовая по физике, моделируем маятник"></textarea>
  <label class="toggle" style="margin-top:12px"><input type="checkbox" id="pOpen"> Открытый: в проект можно вступить из общего чата без кода</label>
  <div class="row"><button class="ghost" value="cancel" formnovalidate>Отмена</button><button value="ok">Создать</button></div>
+</form></dialog>
+<dialog id="dlgKeys" style="width:min(640px,94vw)"><form method="dialog">
+ <h3 style="margin-top:0">API-ключи и Hermes Agent</h3>
+ <p class="small muted">Ключ даёт программам доступ к большой модели Улья от вашего имени. Например, <b>Hermes Agent</b> (открытый агент от Nous Research, лицензия MIT): он работает у вас на компьютере, помнит прошлые разговоры, сам создаёт себе навыки и умеет работать через Telegram, а «мозгом» у него будет Улей. Команды агента выполняются у вас, добровольцы только считают модель.</p>
+ <div id="keyList"></div>
+ <div class="row" style="justify-content:flex-start"><input id="keyName" placeholder="Название ключа, например «Hermes на ноутбуке»" style="flex:1"><button type="button" id="keyCreate">Создать ключ</button></div>
+ <div id="keyNew" class="hidden" style="margin-top:12px">
+  <p class="small">Скопируйте ключ сейчас: потом его не будет видно.</p>
+  <pre class="code" id="keyValue" style="white-space:pre-wrap;word-break:break-all"></pre>
+ </div>
+ <h4 style="margin:18px 0 6px">Как подключить Hermes Agent</h4>
+ <ol class="small" style="padding-left:18px;margin:0">
+  <li>Установите Hermes Agent по инструкции на его странице GitHub (NousResearch/hermes-agent).</li>
+  <li>Выполните <code>hermes model</code> → «Custom endpoint» и введите адрес, ключ и модель ниже. Или впишите в <code>~/.hermes/config.yaml</code>:</li>
+ </ol>
+ <pre class="code" id="hermesCfg" style="white-space:pre;overflow-x:auto;margin-top:8px"></pre>
+ <p class="small muted" id="ctxNote"></p>
+ <div class="row"><button value="close">Готово</button></div>
 </form></dialog>
 <dialog id="dlgJoin"><form method="dialog" id="fJoin">
  <h3 style="margin-top:0">Вступить в проект</h3>
@@ -286,7 +305,7 @@ function renderNav(){
 async function refreshMe(){
  try{const me=await api('/me');S.me=me.user;S.chats=me.chats;S.projects=me.projects}catch(e){S.me=null}
  $('navUser').classList.toggle('hidden',!S.me);$('auth').classList.toggle('hidden',!!S.me);
- $('who').classList.toggle('hidden',!S.me);$('logout').classList.toggle('hidden',!S.me);
+ $('who').classList.toggle('hidden',!S.me);$('logout').classList.toggle('hidden',!S.me);$('keysBtn').classList.toggle('hidden',!S.me);
  if(S.me){$('who').textContent=S.me.name;renderNav()}
 }
 function closeNav(){$('nav').classList.remove('open')}
@@ -375,6 +394,22 @@ $('authForm').onsubmit=async e=>{e.preventDefault();
   else await api('/auth/login',{method:'POST',body:{login:$('aLogin').value,password:$('aPass').value}});
   await refreshMe();connect();if(location.hash.length>1)openChat(location.hash.slice(1))}
  catch(err){$('aErr').textContent=err.message}};
+/* ---------- API keys ---------- */
+async function loadKeys(newKey){
+ const d=await api('/keys');const box=$('keyList');box.replaceChildren();
+ for(const k of d.keys){const row=document.createElement('div');row.className='item';row.style.cursor='default';
+  row.innerHTML='<span>🔑</span><span class="t"></span><span class="small muted"></span><button type="button" class="ghost small">Удалить</button>';
+  row.children[1].textContent=k.name+' · '+k.prefix;row.children[2].textContent=k.last_used?'использован '+new Date(k.last_used*1000).toLocaleString('ru-RU'):'не использован';
+  row.children[3].onclick=async()=>{if(confirm('Удалить ключ «'+k.name+'»? Программы с ним перестанут работать.')){await api('/keys/'+k.id,{method:'DELETE'});loadKeys()}};
+  box.append(row)}
+ if(!d.keys.length)box.innerHTML='<p class="small muted">Ключей пока нет.</p>';
+ const key=newKey||'uley-…ваш-ключ…';
+ $('hermesCfg').textContent='model:\n  provider: custom\n  base_url: '+location.origin+'/v1\n  api_key: '+key+'\n  default: '+d.model+'\n';
+ $('ctxNote').textContent='Модель улья: '+d.model+', до '+fmt(d.context)+' токенов на разговор'+(d.context<64000?' — Hermes требует не меньше 64 000, на этом улье он не запустится.':' — этого хватает для Hermes (нужно от 64 000).');
+}
+$('keysBtn').onclick=async()=>{$('keyNew').classList.add('hidden');$('keyName').value='';await loadKeys();$('dlgKeys').showModal()};
+$('keyCreate').onclick=async()=>{try{const k=await api('/keys',{method:'POST',body:{name:$('keyName').value}});
+ $('keyValue').textContent=k.key;$('keyNew').classList.remove('hidden');await loadKeys(k.key)}catch(e){alert(e.message)}};
 $('logout').onclick=async()=>{await api('/auth/logout',{method:'POST',body:{}});S.me=null;await refreshMe();showBoard();connect()};
 
 (async()=>{await refreshMe();connect();if(S.me&&location.hash.length>1)openChat(location.hash.slice(1))})();

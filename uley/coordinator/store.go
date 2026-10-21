@@ -96,6 +96,17 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+	// Columns added after the first release; ALTER fails harmlessly when
+	// the column already exists.
+	for _, q := range []string{
+		`ALTER TABLE tasks ADD COLUMN tool_calls TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE assignments ADD COLUMN tool_calls TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE assignments ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE tasks ADD COLUMN owner TEXT NOT NULL DEFAULT ''`,
+	} {
+		db.Exec(q)
+	}
 	return &Store{db: db, now: time.Now}, nil
 }
 
@@ -167,22 +178,40 @@ type taskPayload struct {
 	MaxTokens   int                `json:"max_tokens"`
 	Temperature float64            `json:"temperature"`
 	Seed        int64              `json:"seed"`
+	Tools       json.RawMessage    `json:"tools,omitempty"`
+	ToolChoice  json.RawMessage    `json:"tool_choice,omitempty"`
 }
 
 // CreateTask queues a task. replicas > 1 means the same task is computed by
 // that many different nodes and the answers are compared.
 func (s *Store) CreateTask(model string, p taskPayload, replicas int) (string, error) {
+	return s.CreateTaskFor("", model, p, replicas)
+}
+
+// CreateTaskFor queues a task on behalf of a user ("" = nobody in particular).
+func (s *Store) CreateTaskFor(owner, model string, p taskPayload, replicas int) (string, error) {
 	id := newID("t_")
 	raw, _ := json.Marshal(p)
-	_, err := s.db.Exec(`INSERT INTO tasks(id, model, payload, status, replicas, created_at) VALUES(?,?,?,?,?,?)`,
-		id, model, string(raw), protocol.TaskQueued, replicas, s.now().Unix())
+	_, err := s.db.Exec(`INSERT INTO tasks(id, model, payload, status, replicas, created_at, owner) VALUES(?,?,?,?,?,?,?)`,
+		id, model, string(raw), protocol.TaskQueued, replicas, s.now().Unix(), owner)
 	return id, err
+}
+
+// OpenTasks counts a user's tasks that are not finished yet.
+func (s *Store) OpenTasks(owner string) int {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE owner=? AND status IN ('queued','running')`, owner).Scan(&n)
+	return n
 }
 
 func (s *Store) GetTask(id string) (protocol.Task, error) {
 	var t protocol.Task
-	err := s.db.QueryRow(`SELECT id, status, model, output, error, verify, created_at, completed_at FROM tasks WHERE id=?`, id).
-		Scan(&t.ID, &t.Status, &t.Model, &t.Output, &t.Error, &t.Verify, &t.CreatedAt, &t.CompletedAt)
+	var calls string
+	err := s.db.QueryRow(`SELECT id, status, model, output, tool_calls, finish_reason, error, verify, created_at, completed_at FROM tasks WHERE id=?`, id).
+		Scan(&t.ID, &t.Status, &t.Model, &t.Output, &calls, &t.FinishReason, &t.Error, &t.Verify, &t.CreatedAt, &t.CompletedAt)
+	if calls != "" {
+		t.ToolCalls = json.RawMessage(calls)
+	}
 	return t, err
 }
 
@@ -240,6 +269,7 @@ func (s *Store) Assign(nodeID string, models []string, timeout time.Duration) (*
 	return &protocol.Job{
 		ID: aid, TaskID: taskID, Model: model, Messages: p.Messages,
 		MaxTokens: p.MaxTokens, Temperature: p.Temperature, Seed: p.Seed, DeadlineUnix: deadline,
+		Tools: p.Tools, ToolChoice: p.ToolChoice,
 	}, nil
 }
 
@@ -278,8 +308,8 @@ func (s *Store) Complete(nodeID, assignmentID string, r protocol.JobResult) erro
 		}
 		return tx.Commit()
 	}
-	if _, err := tx.Exec(`UPDATE assignments SET status=?, output=?, tokens_out=?, duration_ms=?, finished_at=? WHERE id=?`,
-		asDone, r.Output, r.TokensOut, r.DurationMS, now, assignmentID); err != nil {
+	if _, err := tx.Exec(`UPDATE assignments SET status=?, output=?, tool_calls=?, finish_reason=?, tokens_out=?, duration_ms=?, finished_at=? WHERE id=?`,
+		asDone, r.Output, string(r.ToolCalls), r.FinishReason, r.TokensOut, r.DurationMS, now, assignmentID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE nodes SET jobs_done=jobs_done+1, tokens_out=tokens_out+?, last_seen=? WHERE id=?`, r.TokensOut, now, nodeID); err != nil {
@@ -323,8 +353,10 @@ func failTaskTx(tx *sql.Tx, taskID, reason string, now int64) error {
 }
 
 type replicaResult struct {
-	nodeID string
-	output string
+	nodeID    string
+	output    string
+	toolCalls string
+	finish    string
 }
 
 // settleTx finalises a task when its replicas are in. With force set (the
@@ -338,14 +370,14 @@ func settleTx(tx *sql.Tx, taskID string, now int64, force bool) error {
 	if status == protocol.TaskDone || status == protocol.TaskFailed {
 		return nil
 	}
-	rows, err := tx.Query(`SELECT node_id, output FROM assignments WHERE task_id=? AND status=? ORDER BY finished_at, rowid`, taskID, asDone)
+	rows, err := tx.Query(`SELECT node_id, output, tool_calls, finish_reason FROM assignments WHERE task_id=? AND status=? ORDER BY finished_at, rowid`, taskID, asDone)
 	if err != nil {
 		return err
 	}
 	var results []replicaResult
 	for rows.Next() {
 		var r replicaResult
-		if err := rows.Scan(&r.nodeID, &r.output); err != nil {
+		if err := rows.Scan(&r.nodeID, &r.output, &r.toolCalls, &r.finish); err != nil {
 			rows.Close()
 			return err
 		}
@@ -356,9 +388,9 @@ func settleTx(tx *sql.Tx, taskID string, now int64, force bool) error {
 		return err
 	}
 
-	finish := func(output, verify string) error {
-		_, err := tx.Exec(`UPDATE tasks SET status=?, output=?, verify=?, completed_at=? WHERE id=?`,
-			protocol.TaskDone, output, verify, now, taskID)
+	finish := func(r replicaResult, verify string) error {
+		_, err := tx.Exec(`UPDATE tasks SET status=?, output=?, tool_calls=?, finish_reason=?, verify=?, completed_at=? WHERE id=?`,
+			protocol.TaskDone, r.output, r.toolCalls, r.finish, verify, now, taskID)
 		return err
 	}
 
@@ -366,11 +398,11 @@ func settleTx(tx *sql.Tx, taskID string, now int64, force bool) error {
 	case len(results) == 0:
 		return nil
 	case replicas == 1:
-		return finish(results[0].output, protocol.VerifyNone)
+		return finish(results[0], protocol.VerifyNone)
 	case len(results) < replicas && !force:
 		return nil
 	case len(results) == 1:
-		return finish(results[0].output, protocol.VerifyPartial)
+		return finish(results[0], protocol.VerifyPartial)
 	}
 
 	// Find the biggest group of answers that agree with each other.
@@ -397,14 +429,14 @@ func settleTx(tx *sql.Tx, taskID string, now int64, force bool) error {
 				return err
 			}
 		}
-		return finish(winner, protocol.VerifyOK)
+		return finish(results[bestIdx], protocol.VerifyOK)
 	}
 	if replicas < 3 && !force {
 		// Two different answers: ask a third node to break the tie.
 		_, err := tx.Exec(`UPDATE tasks SET replicas=3 WHERE id=?`, taskID)
 		return err
 	}
-	return finish(results[0].output, protocol.VerifyMismatch)
+	return finish(results[0], protocol.VerifyMismatch)
 }
 
 // Nodes whose trust falls below banTrust stop getting work.

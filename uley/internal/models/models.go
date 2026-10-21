@@ -22,6 +22,14 @@ type Model struct {
 	Chain bool `json:"chain,omitempty"`
 	// Layers is the number of transformer blocks a chain splits.
 	Layers int `json:"layers,omitempty"`
+	// Slots is how many conversations a chain serves at once; each gets
+	// ContextSize/Slots tokens.
+	Slots int `json:"slots,omitempty"`
+	// KVCacheType quantises the attention cache (e.g. q8_0) to save memory.
+	KVCacheType string `json:"kv_cache_type,omitempty"`
+	// RopeScale > 1 extends the native context with YaRN.
+	RopeScale   float64 `json:"rope_scale,omitempty"`
+	YarnOrigCtx int     `json:"yarn_orig_ctx,omitempty"`
 }
 
 // Hashes are the LFS sha256 values published by Hugging Face for the
@@ -72,17 +80,24 @@ var whitelist = []Model{
 		License:     "Apache-2.0",
 	},
 	{
-		ID:          "qwen3-32b",
-		Name:        "Qwen3 32B (Q4_K_M), общая модель улья",
-		File:        "Qwen3-32B-Q4_K_M.gguf",
-		URL:         "https://huggingface.co/Qwen/Qwen3-32B-GGUF/resolve/main/Qwen3-32B-Q4_K_M.gguf",
-		SHA256:      "efd971561896866f0e910cce52761ca77b1b138090c7f15fe284676d57d1f689",
-		SizeBytes:   19762149024,
-		MinVRAMMB:   25600, // weights + KV cache for 4 parallel chats + buffers
-		ContextSize: 16384, // shared by 4 parallel chats
+		ID:        "qwen3-32b",
+		Name:      "Qwen3 32B (Q4_K_M), общая модель улья",
+		File:      "Qwen3-32B-Q4_K_M.gguf",
+		URL:       "https://huggingface.co/Qwen/Qwen3-32B-GGUF/resolve/main/Qwen3-32B-Q4_K_M.gguf",
+		SHA256:    "efd971561896866f0e910cce52761ca77b1b138090c7f15fe284676d57d1f689",
+		SizeBytes: 19762149024,
+		// Two conversations of 64k tokens each: enough for agents such as
+		// Hermes Agent, which needs at least 64k. Weights 18.4 GB + q8_0 KV
+		// cache for 2×64k tokens (~17 GB) + buffers.
+		MinVRAMMB:   38912,
+		ContextSize: 131072,
 		License:     "Apache-2.0",
 		Chain:       true,
 		Layers:      64,
+		Slots:       2,
+		KVCacheType: "q8_0",
+		RopeScale:   2,
+		YarnOrigCtx: 32768,
 	},
 }
 

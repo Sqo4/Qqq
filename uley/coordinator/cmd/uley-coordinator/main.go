@@ -83,6 +83,7 @@ func main() {
 	domain := flag.String("domain", env("ULEY_DOMAIN", ""), "public domain; enables automatic HTTPS via Let's Encrypt")
 	dbPath := flag.String("db", env("ULEY_DB", "uley.db"), "SQLite database file")
 	apiKeys := flag.String("api-keys", env("ULEY_API_KEYS", ""), "comma separated API keys allowed to submit tasks (empty = open, for testing only)")
+	requireKey := flag.Bool("require-api-key", os.Getenv("ULEY_REQUIRE_API_KEY") != "0", "close /v1 and the task API to callers without a key (admin key or a personal key from the web app); set false only for local tests")
 	signupKey := flag.String("signup-key", env("ULEY_SIGNUP_KEY", ""), "optional code people must enter to create an account (e.g. for a university)")
 	joinKey := flag.String("join-key", env("ULEY_JOIN_KEY", ""), "optional key nodes must know to register")
 	verify := flag.Float64("verify-rate", 0.1, "share of temperature-0 tasks computed twice for verification")
@@ -105,8 +106,8 @@ func main() {
 			keys = append(keys, k)
 		}
 	}
-	if len(keys) == 0 {
-		log.Printf("WARNING: no -api-keys set, anyone can submit tasks")
+	if len(keys) == 0 && !*requireKey {
+		log.Printf("WARNING: -require-api-key=false and no -api-keys: anyone can submit tasks")
 	}
 	model, ok := models.Get(*hiveModel)
 	if !ok {
@@ -117,7 +118,7 @@ func main() {
 
 	cfg := coordinator.Config{
 		APIKeys: keys, JoinKey: *joinKey, VerifyRate: *verify, JobTimeout: *jobTimeout, Web: web.FS,
-		HiveModel: model.ID, SignupKey: *signupKey,
+		HiveModel: model.ID, SignupKey: *signupKey, RequireAPIKey: *requireKey,
 	}
 	if model.Chain {
 		head := *headBin

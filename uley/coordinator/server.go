@@ -46,6 +46,10 @@ type Config struct {
 	// SignupKey, if set, is required to create an account (e.g. a
 	// university running its own hive).
 	SignupKey string
+	// RequireAPIKey closes the task API to anonymous callers even when no
+	// admin keys are set; people then use the personal keys from their
+	// account (e.g. for Hermes Agent).
+	RequireAPIKey bool
 }
 
 func (c *Config) defaults() {
@@ -81,6 +85,7 @@ func NewServer(store *Store, cfg Config) *Server {
 	s.mux.HandleFunc("POST "+p+"/tasks", s.apiAuth(s.handleSubmit))
 	s.mux.HandleFunc("GET "+p+"/tasks/{id}", s.apiAuth(s.handleGetTask))
 	s.mux.HandleFunc("POST /v1/chat/completions", s.apiAuth(s.handleChatCompletions))
+	s.mux.HandleFunc("GET /v1/models", s.apiAuth(s.handleOpenAIModels))
 	s.mux.HandleFunc("GET "+p+"/stats", s.handleStats)
 	s.mux.HandleFunc("GET "+p+"/models", s.handleModels)
 	s.mux.HandleFunc("GET "+p+"/hive", s.handleHive)
@@ -102,7 +107,11 @@ func NewServer(store *Store, cfg Config) *Server {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
+	limit := int64(256 << 10)
+	if strings.HasPrefix(r.URL.Path, "/v1/") || strings.HasSuffix(r.URL.Path, "/result") || r.URL.Path == protocol.APIPrefix+"/tasks" {
+		limit = 4 << 20 // long agent conversations and their answers
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	s.mux.ServeHTTP(w, r)
 }
 
@@ -189,22 +198,40 @@ func (s *Server) nodeAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func nodeID(r *http.Request) string { return r.Context().Value(ctxKey{}).(string) }
 
+type apiUserKey struct{}
+
+// apiUser is the account behind a personal API key, or "" (admin key or
+// open access).
+func apiUser(r *http.Request) string {
+	if v, ok := r.Context().Value(apiUserKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// apiAuth accepts an admin key from the configuration or a personal key
+// made in the web app. Without any admin key and RequireAPIKey unset the
+// API is open, which is meant for local testing only.
 func (s *Server) apiAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if len(s.cfg.APIKeys) > 0 {
-			key := bearer(r)
-			ok := false
-			for _, k := range s.cfg.APIKeys {
-				if key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(k)) == 1 {
-					ok = true
-				}
-			}
-			if !ok {
-				writeErr(w, http.StatusUnauthorized, "missing or wrong API key")
+		key := bearer(r)
+		for _, k := range s.cfg.APIKeys {
+			if key != "" && subtle.ConstantTimeCompare([]byte(key), []byte(k)) == 1 {
+				next(w, r)
 				return
 			}
 		}
-		next(w, r)
+		if key != "" {
+			if uid, err := s.store.UserByAPIKey(key); err == nil {
+				next(w, r.WithContext(context.WithValue(r.Context(), apiUserKey{}, uid)))
+				return
+			}
+		}
+		if len(s.cfg.APIKeys) == 0 && !s.cfg.RequireAPIKey && key == "" {
+			next(w, r)
+			return
+		}
+		writeErr(w, http.StatusUnauthorized, "missing or wrong API key")
 	}
 }
 
@@ -341,6 +368,10 @@ func (s *Server) handleResult(w http.ResponseWriter, r *http.Request) {
 	if len(res.Output) > protocol.MaxOutputBytes {
 		res.Output = res.Output[:protocol.MaxOutputBytes]
 	}
+	if len(res.ToolCalls) > protocol.MaxOutputBytes || len(res.ToolCalls) > 0 && !json.Valid(res.ToolCalls) {
+		res.ToolCalls = nil
+	}
+	res.FinishReason = clean(res.FinishReason, 20)
 	res.Error = clean(res.Error, 300)
 	if res.TokensOut < 0 || res.TokensOut > protocol.MaxTokensLimit*2 {
 		res.TokensOut = 0
@@ -360,9 +391,9 @@ func (s *Server) handleResult(w http.ResponseWriter, r *http.Request) {
 }
 
 // validate turns a submit request into a task payload.
-func validate(req protocol.SubmitRequest) (taskPayload, error) {
+func validate(req protocol.SubmitRequest, chainModel string) (taskPayload, error) {
 	var p taskPayload
-	if _, ok := models.Get(req.Model); !ok {
+	if _, ok := models.Get(req.Model); !ok && (chainModel == "" || req.Model != chainModel) {
 		return p, fmt.Errorf("unknown model %q, see %s/models", req.Model, protocol.APIPrefix)
 	}
 	msgs := req.Messages
@@ -374,12 +405,10 @@ func validate(req protocol.SubmitRequest) (taskPayload, error) {
 	}
 	total := 0
 	for _, m := range msgs {
-		switch m.Role {
-		case "system", "user", "assistant":
-		default:
+		if !protocol.ValidRole(m.Role) {
 			return p, fmt.Errorf("bad role %q", m.Role)
 		}
-		total += len(m.Content)
+		total += len(m.Content) + len(m.ToolCalls)
 	}
 	if total > protocol.MaxPromptBytes {
 		return p, fmt.Errorf("prompt is longer than %d bytes", protocol.MaxPromptBytes)
@@ -398,10 +427,22 @@ func validate(req protocol.SubmitRequest) (taskPayload, error) {
 		return p, errors.New("temperature must be within 0..2")
 	}
 	p.Seed = req.Seed
+	if len(req.Tools)+len(req.ToolChoice) > protocol.MaxToolsBytes {
+		return p, fmt.Errorf("tool definitions are longer than %d bytes", protocol.MaxToolsBytes)
+	}
+	if len(req.Tools) > 0 && !json.Valid(req.Tools) || len(req.ToolChoice) > 0 && !json.Valid(req.ToolChoice) {
+		return p, errors.New("tools must be valid JSON")
+	}
+	p.Tools, p.ToolChoice = req.Tools, req.ToolChoice
 	return p, nil
 }
 
 func (s *Server) submit(req protocol.SubmitRequest) (string, error) {
+	return s.submitAs("", req)
+}
+
+// submitAs queues a task on behalf of owner (a user id, "" for admin keys).
+func (s *Server) submitAs(owner string, req protocol.SubmitRequest) (string, error) {
 	if s.cfg.HiveModel != "" {
 		if req.Model == "" {
 			req.Model = s.cfg.HiveModel
@@ -410,7 +451,11 @@ func (s *Server) submit(req protocol.SubmitRequest) (string, error) {
 			return "", fmt.Errorf("this hive runs only %s", s.cfg.HiveModel)
 		}
 	}
-	p, err := validate(req)
+	chainModel := ""
+	if s.cfg.Chain != nil {
+		chainModel = s.cfg.Chain.cfg.Model.ID
+	}
+	p, err := validate(req, chainModel)
 	if err != nil {
 		return "", err
 	}
@@ -418,7 +463,10 @@ func (s *Server) submit(req protocol.SubmitRequest) (string, error) {
 	if p.Temperature == 0 && rand.Float64() < s.cfg.VerifyRate && s.cfg.Chain == nil {
 		replicas = 2
 	}
-	id, err := s.store.CreateTask(req.Model, p, replicas)
+	if owner != "" && s.store.OpenTasks(owner) >= maxOpenTasksPerUser {
+		return "", errTooBusy
+	}
+	id, err := s.store.CreateTaskFor(owner, req.Model, p, replicas)
 	if err != nil {
 		return "", err
 	}
@@ -432,7 +480,11 @@ func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	id, err := s.submit(req)
+	id, err := s.submitAs(apiUser(r), req)
+	if errors.Is(err, errTooBusy) {
+		writeErr(w, http.StatusTooManyRequests, err.Error())
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -469,43 +521,6 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
-}
-
-// handleChatCompletions is a minimal OpenAI-compatible endpoint, so existing
-// tools can talk to the hive. It blocks until the answer is ready.
-func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
-	var req protocol.SubmitRequest
-	if err := readJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad json")
-		return
-	}
-	req.Prompt = ""
-	id, err := s.submit(req)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	t, err := s.waitTask(r.Context(), id, 5*time.Minute)
-	if err != nil {
-		return
-	}
-	switch t.Status {
-	case protocol.TaskDone:
-	case protocol.TaskFailed:
-		writeErr(w, http.StatusBadGateway, "task failed: "+t.Error)
-		return
-	default:
-		writeErr(w, http.StatusGatewayTimeout, "no free node answered in time, task "+t.ID+" is still queued")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id": t.ID, "object": "chat.completion", "created": t.CreatedAt, "model": t.Model,
-		"choices": []map[string]any{{
-			"index": 0, "finish_reason": "stop",
-			"message": protocol.Message{Role: "assistant", Content: t.Output},
-		}},
-		"uley_verify": t.Verify,
-	})
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {

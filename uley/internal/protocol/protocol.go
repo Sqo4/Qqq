@@ -3,17 +3,23 @@
 // is defined in exactly one place.
 package protocol
 
+import "encoding/json"
+
 // APIPrefix is the path prefix of every coordinator API endpoint.
 const APIPrefix = "/api/v1"
 
 // Limits shared by the coordinator and the client. The client enforces
 // them again, so a misbehaving coordinator cannot ask for more.
+//
+// Agents such as Hermes Agent send long conversations with tool schemas
+// (64k tokens of context), hence the generous prompt limit.
 const (
-	MaxPromptBytes   = 32 * 1024
-	MaxOutputBytes   = 64 * 1024
-	MaxTokensLimit   = 2048
-	DefaultMaxTokens = 512
-	MaxMessages      = 64
+	MaxPromptBytes   = 512 * 1024
+	MaxToolsBytes    = 128 * 1024
+	MaxOutputBytes   = 128 * 1024
+	MaxTokensLimit   = 8192
+	DefaultMaxTokens = 1024
+	MaxMessages      = 1024
 )
 
 // Node states reported in heartbeats.
@@ -111,9 +117,24 @@ type HeartbeatResponse struct {
 	Message      string   `json:"message,omitempty"`
 }
 
+// Message is one chat message. Tool fields follow the OpenAI format; they
+// are plain JSON for the model to read and write. Nothing in them is ever
+// executed by a volunteer: an agent (e.g. Hermes) runs the tools itself.
 type Message struct {
-	Role    string `json:"role"` // system, user, assistant
-	Content string `json:"content"`
+	Role       string          `json:"role"` // system, user, assistant, tool
+	Content    string          `json:"content"`
+	Name       string          `json:"name,omitempty"`
+	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+}
+
+// ValidRole reports whether a chat role is allowed.
+func ValidRole(r string) bool {
+	switch r {
+	case "system", "user", "assistant", "tool":
+		return true
+	}
+	return false
 }
 
 // PollRequest asks for the next job a node can run.
@@ -133,23 +154,31 @@ type Job struct {
 	Temperature  float64   `json:"temperature"`
 	Seed         int64     `json:"seed"`
 	DeadlineUnix int64     `json:"deadline_unix"`
+	// Tools and ToolChoice are OpenAI function definitions the model may
+	// answer with; the caller's agent executes them, not the volunteer.
+	Tools      json.RawMessage `json:"tools,omitempty"`
+	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 type JobResult struct {
-	Output     string `json:"output"`
-	TokensOut  int    `json:"tokens_out"`
-	DurationMS int64  `json:"duration_ms"`
-	Error      string `json:"error,omitempty"`
+	Output       string          `json:"output"`
+	ToolCalls    json.RawMessage `json:"tool_calls,omitempty"`
+	FinishReason string          `json:"finish_reason,omitempty"`
+	TokensOut    int             `json:"tokens_out"`
+	DurationMS   int64           `json:"duration_ms"`
+	Error        string          `json:"error,omitempty"`
 }
 
 // SubmitRequest is what an API user sends to put work into the hive.
 type SubmitRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages,omitempty"`
-	Prompt      string    `json:"prompt,omitempty"` // shortcut for a single user message
-	MaxTokens   int       `json:"max_tokens,omitempty"`
-	Temperature *float64  `json:"temperature,omitempty"`
-	Seed        int64     `json:"seed,omitempty"`
+	Model       string          `json:"model"`
+	Messages    []Message       `json:"messages,omitempty"`
+	Prompt      string          `json:"prompt,omitempty"` // shortcut for a single user message
+	MaxTokens   int             `json:"max_tokens,omitempty"`
+	Temperature *float64        `json:"temperature,omitempty"`
+	Seed        int64           `json:"seed,omitempty"`
+	Tools       json.RawMessage `json:"tools,omitempty"`
+	ToolChoice  json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 // Task statuses.
@@ -169,14 +198,16 @@ const (
 )
 
 type Task struct {
-	ID          string `json:"id"`
-	Status      string `json:"status"`
-	Model       string `json:"model"`
-	Output      string `json:"output,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Verify      string `json:"verify"`
-	CreatedAt   int64  `json:"created_at"`
-	CompletedAt int64  `json:"completed_at,omitempty"`
+	ID           string          `json:"id"`
+	Status       string          `json:"status"`
+	Model        string          `json:"model"`
+	Output       string          `json:"output,omitempty"`
+	ToolCalls    json.RawMessage `json:"tool_calls,omitempty"`
+	FinishReason string          `json:"finish_reason,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	Verify       string          `json:"verify"`
+	CreatedAt    int64           `json:"created_at"`
+	CompletedAt  int64           `json:"completed_at,omitempty"`
 }
 
 type Stats struct {

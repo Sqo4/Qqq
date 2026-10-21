@@ -105,6 +105,9 @@ func (s *Server) registerSocial() {
 	s.mux.HandleFunc("GET "+p+"/projects/{id}", s.userAuth(s.handleGetProject))
 	s.mux.HandleFunc("POST "+p+"/projects/join", s.userAuth(s.handleJoinProject))
 	s.mux.HandleFunc("POST "+p+"/projects/{id}/leave", s.userAuth(s.handleLeaveProject))
+	s.mux.HandleFunc("GET "+p+"/keys", s.userAuth(s.handleListKeys))
+	s.mux.HandleFunc("POST "+p+"/keys", s.userAuth(s.handleCreateKey))
+	s.mux.HandleFunc("DELETE "+p+"/keys/{id}", s.userAuth(s.handleDeleteKey))
 	s.mux.HandleFunc("GET "+p+"/events", s.userAuth(s.handleEvents))
 	s.mux.HandleFunc("GET "+p+"/stats/stream", s.handleStatsStream)
 }

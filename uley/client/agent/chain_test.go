@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -32,7 +34,8 @@ func TestChainEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	model := models.Model{ID: "test-chain", Name: "test", Chain: true, MinVRAMMB: 3000, ContextSize: 4096, Layers: 28}
+	model := models.Model{ID: "test-chain", Name: "test", Chain: true, MinVRAMMB: 3000, ContextSize: 8192, Layers: 28,
+		KVCacheType: "q8_0", RopeScale: 2, YarnOrigCtx: 32768}
 	chain, err := coordinator.NewChainManager(store, coordinator.ChainConfig{
 		Model: model, ModelPath: modelPath, HeadBin: filepath.Join(bin, "llama-server"),
 		LogDir: t.TempDir(), Parallel: 2, WorkerTTL: 10 * time.Second, MinRounds: 3, MeasureEvery: time.Second,
@@ -90,6 +93,19 @@ func TestChainEndToEnd(t *testing.T) {
 	if st.Chain.Members != 2 || st.Chain.State != "ready" {
 		t.Fatalf("expected a ready chain of two, got %+v", *st.Chain)
 	}
+
+	// An agent (Hermes-style OpenAI request with tools) gets a tool call back.
+	body := `{"model":"qwen","tool_choice":"required","max_tokens":200,"tools":[{"type":"function","function":{"name":"get_weather","description":"Current weather in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}],"messages":[{"role":"user","content":"What is the weather in Paris right now?"}]}`
+	resp, err := http.Post(hs.URL+"/v1/chat/completions", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(raw), `"get_weather"`) || !strings.Contains(string(raw), "Paris") || !strings.Contains(string(raw), `"tool_calls"`) {
+		t.Fatalf("no tool call from the chain: %s", raw)
+	}
+	t.Logf("agent request answered with: %.300s", raw)
 
 	// The coordinator measured how long it waits for each link.
 	waitFor(t, "link speeds measured", func() bool {

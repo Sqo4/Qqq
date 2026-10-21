@@ -221,7 +221,7 @@ func TestValidateJob(t *testing.T) {
 		t.Fatal("job for another model must be rejected")
 	}
 	bad = ok
-	bad.Messages = []protocol.Message{{Role: "tool", Content: "rm -rf /"}}
+	bad.Messages = []protocol.Message{{Role: "shell", Content: "rm -rf /"}}
 	if _, err := validateJob(bad, "qwen3-0.6b"); err == nil {
 		t.Fatal("unknown role must be rejected")
 	}

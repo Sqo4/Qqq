@@ -56,6 +56,9 @@ type ChainConfig struct {
 
 func (c *ChainConfig) defaults() {
 	if c.Parallel == 0 {
+		c.Parallel = c.Model.Slots
+	}
+	if c.Parallel == 0 {
 		c.Parallel = 4
 	}
 	if c.MinWorkerMB == 0 {
@@ -441,6 +444,14 @@ func (m *ChainManager) start(ctx context.Context, members []string, split []int)
 		"--api-key", c.key,
 		"--jinja",
 	}
+	if t := m.cfg.Model.KVCacheType; t != "" {
+		args = append(args, "--cache-type-k", t, "--cache-type-v", t) // halves the KV cache
+	}
+	if rs := m.cfg.Model.RopeScale; rs > 1 {
+		// YaRN stretches the model's native context (e.g. 32k → 64k).
+		args = append(args, "--rope-scaling", "yarn", "--rope-scale", strconv.FormatFloat(rs, 'f', -1, 64),
+			"--yarn-orig-ctx", strconv.Itoa(m.cfg.Model.YarnOrigCtx))
+	}
 	cmd := exec.Command(m.cfg.HeadBin, args...)
 	var logw io.Writer = io.Discard
 	if m.cfg.LogDir != "" {
@@ -533,10 +544,7 @@ func (m *ChainManager) generate(ctx context.Context, c *liveChain, job protocol.
 	start := time.Now()
 	jctx, cancel := context.WithDeadline(ctx, time.Unix(job.DeadlineUnix, 0))
 	defer cancel()
-	body, _ := json.Marshal(map[string]any{
-		"messages": job.Messages, "max_tokens": job.MaxTokens, "temperature": job.Temperature, "seed": job.Seed,
-		"chat_template_kwargs": map[string]any{"enable_thinking": false},
-	})
+	body, _ := json.Marshal(chatRequest(job))
 	req, _ := http.NewRequestWithContext(jctx, http.MethodPost, c.base+"/v1/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.key)
@@ -545,24 +553,61 @@ func (m *ChainManager) generate(ctx context.Context, c *liveChain, job protocol.
 		return protocol.JobResult{Error: "chain: " + err.Error()}
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode != http.StatusOK {
+		return protocol.JobResult{Error: fmt.Sprintf("chain: %s %.300s", resp.Status, raw)}
+	}
+	res, err := ParseChatResponse(raw)
+	if err != nil {
+		return protocol.JobResult{Error: "chain: " + err.Error()}
+	}
+	res.DurationMS = time.Since(start).Milliseconds()
+	return res
+}
+
+// chatRequest builds the llama-server request for a job. Tools are passed
+// through as-is: the model may answer with tool calls, which go back to
+// the caller's agent to execute.
+func chatRequest(job protocol.Job) map[string]any {
+	req := map[string]any{
+		"messages": job.Messages, "max_tokens": job.MaxTokens, "temperature": job.Temperature, "seed": job.Seed,
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
+	}
+	if len(job.Tools) > 0 {
+		req["tools"] = job.Tools
+		if len(job.ToolChoice) > 0 {
+			req["tool_choice"] = job.ToolChoice
+		}
+	}
+	return req
+}
+
+// ParseChatResponse turns an OpenAI-style completion into a job result.
+func ParseChatResponse(raw []byte) (protocol.JobResult, error) {
 	var cr struct {
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
+				Content   *string         `json:"content"`
+				ToolCalls json.RawMessage `json:"tool_calls"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 		Usage struct {
 			CompletionTokens int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
-	if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &cr) != nil || len(cr.Choices) == 0 {
-		return protocol.JobResult{Error: fmt.Sprintf("chain: %s %.200s", resp.Status, raw)}
+	if err := json.Unmarshal(raw, &cr); err != nil || len(cr.Choices) == 0 {
+		return protocol.JobResult{}, errors.New("unexpected engine response")
 	}
-	return protocol.JobResult{
-		Output: stripThink(cr.Choices[0].Message.Content), TokensOut: cr.Usage.CompletionTokens,
-		DurationMS: time.Since(start).Milliseconds(),
+	ch := cr.Choices[0]
+	res := protocol.JobResult{FinishReason: ch.FinishReason, TokensOut: cr.Usage.CompletionTokens}
+	if ch.Message.Content != nil {
+		res.Output = stripThink(*ch.Message.Content)
 	}
+	if len(ch.Message.ToolCalls) > 2 && string(ch.Message.ToolCalls) != "null" {
+		res.ToolCalls = ch.Message.ToolCalls
+	}
+	return res, nil
 }
 
 func stripThink(s string) string {

@@ -177,8 +177,10 @@ func (e *Llama) stopLocked() {
 type chatResponse struct {
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Content   *string         `json:"content"`
+			ToolCalls json.RawMessage `json:"tool_calls"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		CompletionTokens int `json:"completion_tokens"`
@@ -192,14 +194,21 @@ func (e *Llama) Generate(ctx context.Context, req Request) (Result, error) {
 	if loaded == "" {
 		return Result{}, errors.New("no model loaded")
 	}
-	body, _ := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"messages":             req.Messages,
 		"max_tokens":           req.MaxTokens,
 		"temperature":          req.Temperature,
 		"seed":                 req.Seed,
 		"stream":               false,
 		"chat_template_kwargs": map[string]any{"enable_thinking": false},
-	})
+	}
+	if len(req.Tools) > 0 {
+		payload["tools"] = req.Tools
+		if len(req.ToolChoice) > 0 {
+			payload["tool_choice"] = req.ToolChoice
+		}
+	}
+	body, _ := json.Marshal(payload)
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return Result{}, err
@@ -211,7 +220,7 @@ func (e *Llama) Generate(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("engine: %s: %.200s", resp.Status, raw)
 	}
@@ -219,5 +228,13 @@ func (e *Llama) Generate(ctx context.Context, req Request) (Result, error) {
 	if err := json.Unmarshal(raw, &cr); err != nil || len(cr.Choices) == 0 {
 		return Result{}, errors.New("engine: unexpected response")
 	}
-	return Result{Text: stripThinking(cr.Choices[0].Message.Content), Tokens: cr.Usage.CompletionTokens}, nil
+	ch := cr.Choices[0]
+	res := Result{Finish: ch.FinishReason, Tokens: cr.Usage.CompletionTokens}
+	if ch.Message.Content != nil {
+		res.Text = stripThinking(*ch.Message.Content)
+	}
+	if len(ch.Message.ToolCalls) > 2 && string(ch.Message.ToolCalls) != "null" {
+		res.ToolCalls = ch.Message.ToolCalls
+	}
+	return res, nil
 }

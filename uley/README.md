@@ -59,9 +59,10 @@ uley-coordinator -addr 0.0.0.0:8080 -signup-key КОД-ДЛЯ-СТУДЕНТОВ
 
 ```bash
 cd uley
-go run ./coordinator/cmd/uley-coordinator -model qwen3-0.6b   # сервер на http://127.0.0.1:8080 (режим маленьких моделей)
+go run ./coordinator/cmd/uley-coordinator -model qwen3-0.6b -require-api-key=false   # сервер на http://127.0.0.1:8080 (режим маленьких моделей)
 go run ./client/cmd/uley -fake-engine                # клиент с эмулятором GPU, откроется окно согласия
 # задача:
+# (для локальной проверки запустите сервер с -require-api-key=false)
 curl -X POST localhost:8080/api/v1/tasks -d '{"model":"qwen3-0.6b","prompt":"Привет!"}'
 # или OpenAI-совместимо:
 curl -X POST localhost:8080/v1/chat/completions -d '{"model":"qwen3-0.6b","messages":[{"role":"user","content":"Привет!"}]}'
@@ -91,6 +92,27 @@ ULEY_LLAMA_BIN=~/llama.cpp/build/bin ULEY_TEST_MODEL=~/Qwen3-0.6B-Q8_0.gguf go t
 | GET | `/api/v1/stats`, `/api/v1/models` | статистика улья, список моделей |
 
 Ключ API передаётся в заголовке `Authorization: Bearer КЛЮЧ` (ключи задаются в `-api-keys`).
+
+## Hermes Agent и другие агенты
+
+Улей отвечает как OpenAI-совместимый сервер (`/v1/chat/completions` с вызовом инструментов и потоковым ответом, `/v1/models`). Поэтому к нему можно подключить [Hermes Agent](https://github.com/NousResearch/hermes-agent) — открытый агент от Nous Research (лицензия MIT): память между сессиями, навыки, которые он создаёт себе сам, Telegram/Discord, планировщик задач. Агент работает на компьютере человека и сам выполняет свои инструменты. Добровольцы Улья только считают модель и никаких команд агента не получают.
+
+Как подключить:
+1. В веб-приложении Улья нажмите «🔑 API» и создайте ключ.
+2. Выполните `hermes model`, выберите «Custom endpoint» и введите адрес `https://ваш-домен/v1`, ключ и модель (`qwen3-32b`). Или впишите в `~/.hermes/config.yaml`:
+   ```yaml
+   model:
+     provider: custom
+     base_url: https://ваш-домен/v1
+     api_key: uley-…
+     default: qwen3-32b
+   ```
+
+Hermes требует не меньше 64 000 токенов контекста. Поэтому Qwen3 32B в цепочке работает с расширенным контекстом (YaRN ×2) и сжатым кэшем (q8_0): 2 разговора по 64k. Цепочке нужно около 38 ГБ видеопамяти суммарно — примерно 7–8 игровых видеокарт.
+
+Код Hermes в Улей не копировался, Улей лишь говорит на том же стандартном языке API. «Hermes» и «Nous Research» — чужие названия: Улей можно описывать как «совместим с Hermes Agent», но нельзя называть «Гермесом».
+
+API закрыт без ключа (`-require-api-key`, по умолчанию включено). Для локальных тестов: `-require-api-key=false`.
 
 ## Релиз установщиков
 

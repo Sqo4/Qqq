@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, id);
 CREATE INDEX IF NOT EXISTS messages_pending ON messages(status) WHERE status='pending';
 INSERT OR IGNORE INTO chats(id, kind, title, created_at, updated_at) VALUES('lobby', 'lobby', 'Общий чат', 0, 0);
-`
+` + apiKeysSchema
 
 const (
 	ChatPersonal = "personal"

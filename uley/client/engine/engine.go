@@ -6,6 +6,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/sqo4/uley/internal/models"
@@ -17,11 +18,15 @@ type Request struct {
 	MaxTokens   int
 	Temperature float64
 	Seed        int64
+	Tools       json.RawMessage // function definitions; the model only writes calls
+	ToolChoice  json.RawMessage
 }
 
 type Result struct {
-	Text   string
-	Tokens int
+	Text      string
+	ToolCalls json.RawMessage
+	Finish    string
+	Tokens    int
 }
 
 type Engine interface {

@@ -487,7 +487,7 @@ func (a *Agent) runJob(ctx, work context.Context, s config.Settings, job protoco
 		case err != nil:
 			res.Error = err.Error()
 		default:
-			res.Output, res.TokensOut = out.Text, out.Tokens
+			res.Output, res.TokensOut, res.ToolCalls, res.FinishReason = out.Text, out.Tokens, out.ToolCalls, out.Finish
 			if len(res.Output) > protocol.MaxOutputBytes {
 				res.Output = res.Output[:protocol.MaxOutputBytes]
 			}
@@ -526,12 +526,12 @@ func validateJob(j protocol.Job, loaded string) (engine.Request, error) {
 	}
 	total := 0
 	for _, m := range j.Messages {
-		if m.Role != "system" && m.Role != "user" && m.Role != "assistant" {
+		if !protocol.ValidRole(m.Role) {
 			return engine.Request{}, fmt.Errorf("bad role %q", m.Role)
 		}
-		total += len(m.Content)
+		total += len(m.Content) + len(m.ToolCalls)
 	}
-	if total > protocol.MaxPromptBytes {
+	if total > protocol.MaxPromptBytes || len(j.Tools)+len(j.ToolChoice) > protocol.MaxToolsBytes {
 		return engine.Request{}, errors.New("prompt too long")
 	}
 	maxTok := j.MaxTokens
@@ -539,7 +539,7 @@ func validateJob(j protocol.Job, loaded string) (engine.Request, error) {
 		maxTok = min(max(maxTok, protocol.DefaultMaxTokens), protocol.MaxTokensLimit)
 	}
 	temp := min(max(j.Temperature, 0), 2)
-	return engine.Request{Messages: j.Messages, MaxTokens: maxTok, Temperature: temp, Seed: j.Seed}, nil
+	return engine.Request{Messages: j.Messages, MaxTokens: maxTok, Temperature: temp, Seed: j.Seed, Tools: j.Tools, ToolChoice: j.ToolChoice}, nil
 }
 
 func (a *Agent) ensureRegistered(ctx context.Context, s config.Settings) error {

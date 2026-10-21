@@ -31,7 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	model := models.Model{ID: "qwen3-0.6b", Name: "Qwen3 0.6B (демо)", Chain: true, MinVRAMMB: 3000, ContextSize: 8192, Layers: 28}
+	model := models.Model{ID: "qwen3-0.6b", Name: "Qwen3 0.6B (демо)", Chain: true, MinVRAMMB: 3000, ContextSize: 131072, Layers: 28, KVCacheType: "q8_0", RopeScale: 2, YarnOrigCtx: 32768}
 	chain, err := coordinator.NewChainManager(store, coordinator.ChainConfig{
 		Model: model, ModelPath: modelPath, HeadBin: filepath.Join(bin, "llama-server"), LogDir: dir,
 		Parallel: 2, MinRounds: 3, MeasureEvery: 2 * time.Second,
