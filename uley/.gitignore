@@ -1,0 +1,6 @@
+dist/
+*.db
+*.db-*
+/uley
+/uley-coordinator
+*.exe

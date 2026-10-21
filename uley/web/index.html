@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Улей — панель</title>
+<style>
+:root{--bg:#14110c;--card:#1f1a12;--line:#3a2f1d;--text:#f3ead8;--muted:#b3a589;--honey:#f5b301;--ok:#7bd88f;--bad:#ff7a6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 64px}
+h1{margin:0 0 4px;font-size:28px}h1 span{color:var(--honey)}p.sub{margin:0 0 24px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.big{font-size:30px;font-weight:700;color:var(--honey);font-variant-numeric:tabular-nums}.lbl{color:var(--muted);font-size:14px}
+h2{font-size:20px;margin:32px 0 12px}
+table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid var(--line)}td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+textarea,input,select{width:100%;background:#0f0c08;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.row>*{flex:1 1 200px}
+button{background:var(--honey);color:#1b1400;border:0;border-radius:10px;padding:10px 18px;font-weight:700;font:inherit;cursor:pointer}
+button:disabled{opacity:.5}pre{white-space:pre-wrap;background:#0f0c08;border:1px solid var(--line);border-radius:10px;padding:12px;min-height:48px}
+a{color:var(--honey)}.muted{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>🐝 <span>Улей</span></h1>
+<p class="sub">Распределённая нейросеть на видеокартах добровольцев. <a href="/download">Подключить свой компьютер →</a></p>
+
+<div class="grid">
+ <div class="card"><div class="big" id="online">–</div><div class="lbl">узлов онлайн</div></div>
+ <div class="card"><div class="big" id="working">–</div><div class="lbl">сейчас работают</div></div>
+ <div class="card"><div class="big" id="vram">–</div><div class="lbl">видеопамяти в улье</div></div>
+ <div class="card"><div class="big" id="done">–</div><div class="lbl">задач выполнено</div></div>
+ <div class="card"><div class="big" id="queue">–</div><div class="lbl">в очереди / в работе</div></div>
+ <div class="card"><div class="big" id="tps">–</div><div class="lbl">токенов в секунду</div></div>
+</div>
+
+<h2>Видеокарты и модели</h2>
+<div class="grid">
+ <div class="card"><table id="vendors"></table></div>
+ <div class="card"><table id="models"></table></div>
+</div>
+
+<h2>Спросить улей</h2>
+<div class="card">
+ <div class="row"><select id="model"></select><input id="key" type="password" placeholder="API-ключ (если нужен)"></div>
+ <textarea id="prompt" placeholder="Например: Объясни простыми словами, что такое распределённые вычисления"></textarea>
+ <div class="row"><button id="ask">Отправить</button></div>
+ <pre id="answer" class="muted">Ответ появится здесь.</pre>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const vendorNames={nvidia:'NVIDIA',amd:'AMD',intel:'Intel',apple:'Apple',other:'Другие'};
+function rows(el,obj,names){const e=Object.entries(obj||{});el.replaceChildren();
+ if(!e.length){el.innerHTML='<tr><td class="muted">пока пусто</td><td></td></tr>';return}
+ for(const [k,v] of e.sort((a,b)=>b[1]-a[1])){const tr=document.createElement('tr');
+  tr.innerHTML='<td></td><td></td>';tr.children[0].textContent=(names&&names[k])||k;tr.children[1].textContent=v;el.append(tr)}}
+async function refresh(){try{const s=await (await fetch('/api/v1/stats')).json();
+ $('online').textContent=s.nodes_online;$('working').textContent=s.nodes_working;
+ $('vram').textContent=(s.vram_online_mb/1024).toFixed(1)+' ГБ';$('done').textContent=s.tasks_done;
+ $('queue').textContent=s.tasks_queued+' / '+s.tasks_running;$('tps').textContent=s.tokens_per_sec.toFixed(1);
+ rows($('vendors'),s.gpu_vendors,vendorNames);rows($('models'),s.models_online)}catch(e){}}
+async function loadModels(){const ms=await (await fetch('/api/v1/models')).json();
+ for(const m of ms){const o=document.createElement('option');o.value=m.id;o.textContent=m.name;$('model').append(o)}}
+$('ask').onclick=async()=>{const prompt=$('prompt').value.trim();if(!prompt)return;
+ $('ask').disabled=true;$('answer').textContent='Ищем свободную видеокарту…';
+ const h={'Content-Type':'application/json'};if($('key').value)h.Authorization='Bearer '+$('key').value;
+ try{let r=await fetch('/api/v1/tasks',{method:'POST',headers:h,body:JSON.stringify({model:$('model').value,prompt})});
+  let t=await r.json();if(!r.ok)throw new Error(t.error);
+  while(t.status==='queued'||t.status==='running'){
+   $('answer').textContent=t.status==='queued'?'В очереди…':'Считается на чьей-то видеокарте…';
+   t=await (await fetch('/api/v1/tasks/'+t.id+'?wait=30',{headers:h})).json()}
+  $('answer').textContent=t.status==='done'?t.output:'Не получилось: '+t.error}
+ catch(e){$('answer').textContent='Ошибка: '+e.message}
+ $('ask').disabled=false};
+loadModels();refresh();setInterval(refresh,5000);
+</script>
+</body>
+</html>

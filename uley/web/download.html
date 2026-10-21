@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Улей — скачать</title>
+<style>
+:root{--bg:#14110c;--card:#1f1a12;--line:#3a2f1d;--text:#f3ead8;--muted:#b3a589;--honey:#f5b301}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:820px;margin:0 auto;padding:32px 16px 64px}h1{font-size:30px;margin:0 0 8px}h1 span{color:var(--honey)}
+.lead{color:var(--muted);margin:0 0 28px}
+.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:32px}
+.dl a{display:block;text-decoration:none;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.dl a:hover,.dl a.me{border-color:var(--honey)}.dl b{display:block;font-size:19px;color:var(--honey)}.dl small{color:var(--muted)}
+h2{font-size:21px;margin:28px 0 8px}ul{padding-left:20px}li{margin:4px 0}.note{background:var(--card);border-left:3px solid var(--honey);padding:12px 16px;border-radius:8px;color:var(--muted)}
+a{color:var(--honey)}
+</style>
+</head>
+<body>
+<main>
+<h1>🐝 Подключиться к <span>Улью</span></h1>
+<p class="lead">Улей — распределённая нейросеть, которая работает на видеокартах добровольцев. Пока вы не играете, ваша видеокарта может помогать отвечать на запросы к открытым языковым моделям.</p>
+
+<div class="dl">
+ <a id="win" href="https://github.com/Sqo4/Qqq/releases/latest/download/Uley-Setup-windows-x64.exe"><b>Windows</b><small>Windows 10/11, 64 бит · NVIDIA, AMD, Intel</small></a>
+ <a id="linux" href="https://github.com/Sqo4/Qqq/releases/latest/download/uley_linux_amd64.deb"><b>Linux (.deb)</b><small>Ubuntu, Debian, Mint</small></a>
+ <a id="mac" href="https://github.com/Sqo4/Qqq/releases/latest/download/Uley-macos-arm64.dmg"><b>macOS</b><small>Apple Silicon (M1 и новее)</small></a>
+</div>
+<p style="margin-top:-20px"><small>Другие дистрибутивы Linux: <a href="https://github.com/Sqo4/Qqq/releases/latest/download/uley-linux-amd64.tar.gz">архив .tar.gz</a></small></p>
+
+<h2>Что делает программа</h2>
+<ul>
+ <li>Скачивает одну открытую языковую модель (от 0,6 до 5 ГБ) из проверенного списка и проверяет её контрольную сумму.</li>
+ <li>Получает от сервера Улья текстовые запросы, считает ответы на видеокарте и отправляет их обратно.</li>
+ <li>Не запускает никакой чужой код и ничего не майнит. На сервер уходят только модель видеокарты, объём её памяти и статус задач.</li>
+</ul>
+
+<h2>Вы всё контролируете</h2>
+<ul>
+ <li>По умолчанию работает, только когда компьютер простаивает, и сама встаёт на паузу, когда вы запускаете игру на весь экран.</li>
+ <li>Пауза и продолжение — из значка в трее, рядом с часами.</li>
+ <li>В настройках можно ограничить нагрузку на видеокарту и объём видеопамяти.</li>
+ <li>Автозапуск выключен, пока вы сами его не включите. Удаляется как обычная программа.</li>
+</ul>
+
+<p class="note">Windows может показать окно «Windows защитила ваш компьютер» — так бывает с новыми программами без дорогой цифровой подписи. Нажмите «Подробнее» → «Выполнить в любом случае». Исходный код программы открыт.</p>
+</main>
+<script>
+const ua=navigator.userAgent;const me=/Windows/.test(ua)?'win':/Mac/.test(ua)?'mac':/Linux/.test(ua)?'linux':'';
+if(me)document.getElementById(me).classList.add('me');
+</script>
+</body>
+</html>
