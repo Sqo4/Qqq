@@ -89,6 +89,7 @@ func main() {
 	jobTimeout := flag.Duration("job-timeout", 3*time.Minute, "time a node has to finish a job")
 	hiveModel := flag.String("model", env("ULEY_MODEL", "qwen3-32b"), "the one model the hive serves (see /api/v1/models); a chain model is split over volunteer GPUs")
 	modelDir := flag.String("model-dir", env("ULEY_MODEL_DIR", ""), "where the coordinator keeps a chain model (default: models/ next to the database)")
+	balance := flag.String("chain-balance", env("ULEY_CHAIN_BALANCE", "fastest"), "how layers are split over volunteers: fastest (least time per word) or equal (same time on every link)")
 	headBin := flag.String("llama-server", env("ULEY_LLAMA_SERVER", ""), "llama-server binary that drives the chain (default: engine/ next to this program, then PATH)")
 	flag.Parse()
 
@@ -131,7 +132,7 @@ func main() {
 			dir = filepath.Join(filepath.Dir(*dbPath), "models")
 		}
 		chain, err := coordinator.NewChainManager(store, coordinator.ChainConfig{
-			Model: model, HeadBin: head, LogDir: filepath.Join(filepath.Dir(*dbPath), "logs"),
+			Model: model, HeadBin: head, LogDir: filepath.Join(filepath.Dir(*dbPath), "logs"), Balance: *balance,
 		})
 		if err != nil {
 			log.Fatal(err)

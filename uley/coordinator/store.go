@@ -504,6 +504,21 @@ func (s *Store) WantedModels() ([]string, error) {
 	return out, rows.Err()
 }
 
+// NodeLabel returns a node's public name and its main GPU for the dashboard.
+func (s *Store) NodeLabel(id string) (name, gpu string) {
+	var raw string
+	s.db.QueryRow(`SELECT name, gpus FROM nodes WHERE id=?`, id).Scan(&name, &raw)
+	var gpus []protocol.GPU
+	json.Unmarshal([]byte(raw), &gpus)
+	best := 0
+	for _, g := range gpus {
+		if g.VRAMMB >= best {
+			best, gpu = g.VRAMMB, g.Name
+		}
+	}
+	return name, gpu
+}
+
 // NodeLoad returns a node's measured speed (tokens/s per request) and how
 // many of its assignments are running now.
 func (s *Store) NodeLoad(nodeID string) (speed float64, running int) {

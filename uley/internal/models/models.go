@@ -20,6 +20,8 @@ type Model struct {
 	// the file and spreads the layers over a chain of volunteer GPUs.
 	// For them MinVRAMMB is the total video memory the chain needs.
 	Chain bool `json:"chain,omitempty"`
+	// Layers is the number of transformer blocks a chain splits.
+	Layers int `json:"layers,omitempty"`
 }
 
 // Hashes are the LFS sha256 values published by Hugging Face for the
@@ -80,6 +82,7 @@ var whitelist = []Model{
 		ContextSize: 16384, // shared by 4 parallel chats
 		License:     "Apache-2.0",
 		Chain:       true,
+		Layers:      64,
 	},
 }
 

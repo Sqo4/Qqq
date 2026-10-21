@@ -528,6 +528,9 @@ func (s *Server) Stats() (protocol.Stats, error) {
 	st.HiveModel = s.cfg.HiveModel
 	if c := s.cfg.Chain; c != nil {
 		cs := c.Stats()
+		for i := range cs.Links {
+			cs.Links[i].Name, cs.Links[i].GPU = s.store.NodeLabel(cs.Links[i].ID)
+		}
 		st.Chain = &cs
 		if cs.State == "ready" {
 			speed, running := s.store.NodeLoad(c.nodeID)
@@ -558,13 +561,19 @@ func (s *Server) handleChainWait(w http.ResponseWriter, r *http.Request) {
 	if budget < 0 || budget > 1<<20 {
 		budget = 0
 	}
-	in, err := s.cfg.Chain.Touch(nodeID(r), budget)
+	rtt, _ := strconv.ParseFloat(r.URL.Query().Get("rtt"), 64)
+	if rtt < 0 || rtt > 10000 {
+		rtt = 0
+	}
+	in, err := s.cfg.Chain.Touch(nodeID(r), budget, rtt)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	s.store.Touch(nodeID(r))
-	tok, err := s.cfg.Chain.relay.WaitDial(r.Context(), nodeID(r), 20*time.Second)
+	// Answer well before the worker would count as gone.
+	wait := min(20*time.Second, s.cfg.Chain.cfg.WorkerTTL/3)
+	tok, err := s.cfg.Chain.relay.WaitDial(r.Context(), nodeID(r), wait)
 	if err != nil {
 		return
 	}

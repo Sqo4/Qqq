@@ -54,6 +54,22 @@ type ChainStats struct {
 	NeedMB   int    `json:"need_mb"`
 	HaveMB   int    `json:"have_mb"` // video memory of all chain volunteers online
 	ChainsUp int    `json:"chains_up"`
+	Balance  string `json:"balance"` // fastest or equal
+	// WordMS is the measured time per step through the whole chain
+	// (one step ≈ one word).
+	WordMS float64     `json:"word_ms"`
+	Links  []ChainLink `json:"links,omitempty"`
+}
+
+// ChainLink is one volunteer computer as the dashboard shows it.
+type ChainLink struct {
+	ID      string  `json:"id"`
+	Name    string  `json:"name"`
+	GPU     string  `json:"gpu"`
+	Layers  int     `json:"layers"`
+	StepMS  float64 `json:"step_ms"` // its share of a step, network included
+	NetMS   float64 `json:"net_ms"`
+	InChain bool    `json:"in_chain"`
 }
 
 // GPU is everything a node tells the coordinator about its hardware.

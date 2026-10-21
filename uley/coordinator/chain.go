@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -40,6 +41,17 @@ type ChainConfig struct {
 	LoadTimeout time.Duration
 	// WorkerTTL: a worker that has not polled for this long is gone.
 	WorkerTTL time.Duration
+	// Balance picks how layers are split: "fastest" (default) minimises the
+	// time per word; "equal" gives every link the same time per step.
+	Balance string
+	// MinRounds: a link's speed counts once it answered this many rounds.
+	MinRounds int64
+	// RebalanceAfter: measure a fresh chain this long before reshaping it.
+	RebalanceAfter time.Duration
+	// RebalanceGap: never reshape more often than this.
+	RebalanceGap time.Duration
+	// MeasureEvery: how often link speeds are read.
+	MeasureEvery time.Duration
 }
 
 func (c *ChainConfig) defaults() {
@@ -55,17 +67,41 @@ func (c *ChainConfig) defaults() {
 	if c.WorkerTTL == 0 {
 		c.WorkerTTL = 45 * time.Second
 	}
+	if c.Balance == "" {
+		c.Balance = BalanceFastest
+	}
+	if c.MinRounds == 0 {
+		c.MinRounds = 50
+	}
+	if c.RebalanceAfter == 0 {
+		c.RebalanceAfter = 2 * time.Minute
+	}
+	if c.RebalanceGap == 0 {
+		c.RebalanceGap = 10 * time.Minute
+	}
+	if c.MeasureEvery == 0 {
+		c.MeasureEvery = 15 * time.Second
+	}
 }
+
+// Balance modes.
+const (
+	BalanceFastest = "fastest"
+	BalanceEqual   = "equal"
+)
 
 type chainWorker struct {
 	id       string
 	budgetMB int
+	rttMS    float64 // network round trip reported by the worker
 	seen     time.Time
-	served   bool // was in a chain before, so its weight cache is warm
 }
 
 type liveChain struct {
 	members []string
+	layers  []int
+	stepMS  []float64 // measured time per step of each link, 0 = not yet
+	readyAt time.Time
 	cmd     *exec.Cmd
 	exited  chan struct{}
 	base    string
@@ -89,6 +125,11 @@ type ChainManager struct {
 	workers map[string]*chainWorker
 	chain   *liveChain
 	message string
+	// speeds remembers each volunteer's compute time per layer, so a
+	// returning computer gets its fair share right away.
+	speeds        map[string]float64
+	lastMeasure   time.Time
+	lastRebalance time.Time
 }
 
 func NewChainManager(store *Store, cfg ChainConfig) (*ChainManager, error) {
@@ -96,18 +137,21 @@ func NewChainManager(store *Store, cfg ChainConfig) (*ChainManager, error) {
 	if !cfg.Model.Chain {
 		return nil, fmt.Errorf("%s is not a chain model", cfg.Model.ID)
 	}
+	if cfg.Balance != "" && cfg.Balance != BalanceFastest && cfg.Balance != BalanceEqual {
+		return nil, fmt.Errorf("unknown balance mode %q (fastest or equal)", cfg.Balance)
+	}
 	reg, err := store.RegisterNode(protocol.RegisterRequest{NodeName: "Цепочка " + cfg.Model.Name, OS: "chain", Arch: "-", ClientVersion: "-"})
 	if err != nil {
 		return nil, err
 	}
 	return &ChainManager{
 		cfg: cfg, store: store, relay: rpctunnel.NewRelay(), nodeID: reg.NodeID,
-		workers: map[string]*chainWorker{}, message: "Ждём участников",
+		workers: map[string]*chainWorker{}, message: "Ждём участников", speeds: map[string]float64{},
 	}, nil
 }
 
 // Touch records a worker's poll and returns whether it is in the chain.
-func (m *ChainManager) Touch(nodeID string, budgetMB int) (bool, error) {
+func (m *ChainManager) Touch(nodeID string, budgetMB int, rttMS float64) (bool, error) {
 	if _, err := m.relay.Attach(nodeID); err != nil {
 		return false, err
 	}
@@ -119,6 +163,9 @@ func (m *ChainManager) Touch(nodeID string, budgetMB int) (bool, error) {
 		m.workers[nodeID] = w
 	}
 	w.budgetMB, w.seen = budgetMB, time.Now()
+	if rttMS > 0 {
+		w.rttMS = rttMS
+	}
 	return m.chain != nil && contains(m.chain.members, nodeID), nil
 }
 
@@ -182,6 +229,7 @@ func (m *ChainManager) tick(ctx context.Context) {
 		case <-ch.exited:
 			m.breakChain("движок цепочки остановился, пересобираем")
 		default:
+			m.measure(ch)
 		}
 		return
 	}
@@ -198,45 +246,135 @@ func (m *ChainManager) tick(ctx context.Context) {
 	m.start(ctx, members, split)
 }
 
-// pick chooses workers whose memory covers the model. Workers that served
-// before go first: their weight cache saves hours of upload.
+// layersPerMB: how much video memory one layer of the model needs.
+func (m *ChainManager) layerMB() int {
+	n := max(m.cfg.Model.Layers, 1)
+	return (m.cfg.Model.MinVRAMMB + n - 1) / n
+}
+
+// pick chooses the links and their share of layers from everybody online,
+// using the speeds measured so far. Caller must not hold m.mu.
 func (m *ChainManager) pick() ([]string, []int, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var cands []*chainWorker
-	have := 0
-	for _, w := range m.workers {
-		if w.budgetMB >= m.cfg.MinWorkerMB {
-			cands = append(cands, w)
-			have += w.budgetMB
-		}
-	}
+	in, have := m.inputsLocked()
 	need := m.cfg.Model.MinVRAMMB
 	if have < need {
 		m.message = fmt.Sprintf("Ждём участников: есть %.1f из %.1f ГБ видеопамяти", float64(have)/1024, float64(need)/1024)
 		return nil, nil, false
 	}
-	sort.Slice(cands, func(i, j int) bool {
-		if cands[i].served != cands[j].served {
-			return cands[i].served
-		}
-		if cands[i].budgetMB != cands[j].budgetMB {
-			return cands[i].budgetMB > cands[j].budgetMB
-		}
-		return cands[i].id < cands[j].id
-	})
+	layers, ok := m.allocate(in)
+	if !ok {
+		m.message = "Не хватает памяти участников даже для разбиения по слоям, ждём ещё"
+		return nil, nil, false
+	}
 	var members []string
 	var split []int
-	sum := 0
-	for _, w := range cands {
-		if sum >= need {
-			break
+	for i, l := range layers {
+		if l > 0 {
+			members = append(members, in[i].ID)
+			split = append(split, l)
 		}
-		members = append(members, w.id)
-		split = append(split, w.budgetMB)
-		sum += w.budgetMB
 	}
 	return members, split, true
+}
+
+func (m *ChainManager) inputsLocked() ([]BalanceInput, int) {
+	var in []BalanceInput
+	have := 0
+	perLayer := m.layerMB()
+	for _, w := range m.workers {
+		if w.budgetMB < m.cfg.MinWorkerMB {
+			continue
+		}
+		have += w.budgetMB
+		in = append(in, BalanceInput{ID: w.id, MaxLayers: w.budgetMB / perLayer, LayerMS: m.speeds[w.id], NetMS: w.rttMS})
+	}
+	sort.Slice(in, func(i, j int) bool { return in[i].ID < in[j].ID }) // stable choices
+	return in, have
+}
+
+func (m *ChainManager) allocate(in []BalanceInput) ([]int, bool) {
+	total := max(m.cfg.Model.Layers, 1)
+	if m.cfg.Balance == BalanceEqual {
+		l, _, ok := Balance(in, total)
+		return l, ok
+	}
+	l, _, ok := Fastest(in, total)
+	return l, ok
+}
+
+// measure reads how long the head waits for every link, learns each
+// volunteer's speed, and reshapes the chain when that would make words
+// come out clearly faster.
+func (m *ChainManager) measure(c *liveChain) {
+	m.mu.Lock()
+	if !c.ready || time.Since(m.lastMeasure) < m.cfg.MeasureEvery {
+		m.mu.Unlock()
+		return
+	}
+	m.lastMeasure = time.Now()
+	m.mu.Unlock()
+
+	steps := make([]float64, len(c.members))
+	complete := true
+	for i, id := range c.members {
+		r, ok := m.relay.Meter(id)
+		if !ok || r.Rounds < m.cfg.MinRounds {
+			complete = false
+			continue
+		}
+		steps[i] = float64(r.Wait.Microseconds()) / 1000 / float64(r.Rounds)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current := 0.0
+	for i, id := range c.members {
+		if steps[i] == 0 {
+			continue
+		}
+		c.stepMS[i] = steps[i]
+		current += steps[i]
+		net := 0.0
+		if w, ok := m.workers[id]; ok {
+			net = w.rttMS
+		}
+		compute := math.Max(steps[i]-net, 0.05*steps[i])
+		m.speeds[id] = compute / float64(c.layers[i])
+	}
+	if !complete || time.Since(c.readyAt) < m.cfg.RebalanceAfter || time.Since(m.lastRebalance) < m.cfg.RebalanceGap {
+		return
+	}
+	in, _ := m.inputsLocked()
+	layers, ok := m.allocate(in)
+	if !ok {
+		return
+	}
+	cost := measuredCosts(in)
+	predicted := WordTime(in, layers, cost)
+	if m.cfg.Balance == BalanceEqual {
+		predicted = RoundTime(in, layers, cost) * float64(countPositive(layers))
+	}
+	if predicted >= 0.8*current {
+		return // not worth a reload
+	}
+	if _, running := m.store.NodeLoad(m.nodeID); running > 0 {
+		return // wait for a quiet moment, nobody is waiting for an answer then
+	}
+	m.lastRebalance = time.Now()
+	log.Printf("chain: rebalancing, %.0f ms per word now, %.0f ms expected", current, predicted)
+	go m.breakChain(fmt.Sprintf("Перераспределяем слои по скорости участников: было %.0f мс на слово, станет около %.0f", current, predicted))
+}
+
+func countPositive(v []int) int {
+	n := 0
+	for _, x := range v {
+		if x > 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // SetModelPath is called once the model file is downloaded and verified.
@@ -288,7 +426,7 @@ func (m *ChainManager) start(ctx context.Context, members []string, split []int)
 	for i, v := range split {
 		ts[i] = strconv.Itoa(v)
 	}
-	c := &liveChain{members: members, exited: make(chan struct{}), base: "http://127.0.0.1:" + strconv.Itoa(port), key: randKey(), started: time.Now()}
+	c := &liveChain{members: members, layers: split, stepMS: make([]float64, len(members)), exited: make(chan struct{}), base: "http://127.0.0.1:" + strconv.Itoa(port), key: randKey(), started: time.Now()}
 	m.mu.Lock()
 	modelPath := m.cfg.ModelPath
 	m.mu.Unlock()
@@ -328,11 +466,6 @@ func (m *ChainManager) start(ctx context.Context, members []string, split []int)
 	m.mu.Lock()
 	m.chain = c
 	m.message = fmt.Sprintf("Загружаем модель в цепочку из %d участников", len(members))
-	for _, id := range members {
-		if w, ok := m.workers[id]; ok {
-			w.served = true
-		}
-	}
 	m.mu.Unlock()
 	log.Printf("chain: starting with %d workers %v split %v", len(members), members, split)
 	go m.waitReady(cctx, c)
@@ -354,8 +487,11 @@ func (m *ChainManager) waitReady(ctx context.Context, c *liveChain) {
 		}
 		resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
+			for _, id := range c.members {
+				m.relay.ResetMeter(id) // the weight upload is not slowness
+			}
 			m.mu.Lock()
-			c.ready = true
+			c.ready, c.readyAt = true, time.Now()
 			m.message = fmt.Sprintf("Модель работает: цепочка из %d участников", len(c.members))
 			m.mu.Unlock()
 			log.Printf("chain: ready after %v", time.Since(c.started).Round(time.Second))
@@ -462,20 +598,40 @@ func (m *ChainManager) breakChain(reason string) {
 func (m *ChainManager) Stats() protocol.ChainStats {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	st := protocol.ChainStats{Model: m.cfg.Model.ID, State: "waiting", Message: m.message, NeedMB: m.cfg.Model.MinVRAMMB}
-	for _, w := range m.workers {
-		st.HaveMB += w.budgetMB
-	}
-	st.Spares = len(m.workers)
-	if m.chain != nil {
-		st.Members = len(m.chain.members)
-		st.Spares -= st.Members
+	st := protocol.ChainStats{Model: m.cfg.Model.ID, State: "waiting", Message: m.message, NeedMB: m.cfg.Model.MinVRAMMB, Balance: m.cfg.Balance}
+	inChain := map[string]int{}
+	if c := m.chain; c != nil {
+		st.Members = len(c.members)
 		st.State = "loading"
-		if m.chain.ready {
+		if c.ready {
 			st.State, st.ChainsUp = "ready", 1
+		}
+		for i, id := range c.members {
+			inChain[id] = i
+			st.WordMS += c.stepMS[i]
+			st.Links = append(st.Links, protocol.ChainLink{ID: id, Layers: c.layers[i], StepMS: c.stepMS[i], NetMS: m.rttLocked(id), InChain: true})
+		}
+	}
+	ids := make([]string, 0, len(m.workers))
+	for id, w := range m.workers {
+		st.HaveMB += w.budgetMB
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if _, ok := inChain[id]; !ok {
+			st.Spares++
+			st.Links = append(st.Links, protocol.ChainLink{ID: id, NetMS: m.workers[id].rttMS})
 		}
 	}
 	return st
+}
+
+func (m *ChainManager) rttLocked(id string) float64 {
+	if w, ok := m.workers[id]; ok {
+		return w.rttMS
+	}
+	return 0
 }
 
 var errNotChain = errors.New("this hive does not run a chain model")

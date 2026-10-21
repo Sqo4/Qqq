@@ -59,6 +59,8 @@ type Agent struct {
 	kick     chan struct{}
 	hive     protocol.Hive
 	hiveTime time.Time
+	rttMS    float64
+	rttTime  time.Time
 }
 
 // Status is a snapshot for the tray and the settings page.
@@ -381,7 +383,7 @@ func (a *Agent) chainStep(ctx context.Context, hive protocol.Hive, budget int) e
 			return "", errors.New("rpc-server stopped")
 		}
 		var w protocol.ChainWait
-		_, err := a.api(pctx, http.MethodGet, fmt.Sprintf("/chain/wait?budget=%d", budget), nil, &w)
+		_, err := a.api(pctx, http.MethodGet, fmt.Sprintf("/chain/wait?budget=%d&rtt=%.1f", budget, a.pingCoordinator(pctx)), nil, &w)
 		if err != nil {
 			return "", err
 		}
@@ -406,6 +408,44 @@ func (a *Agent) chainStep(ctx context.Context, hive protocol.Hive, budget int) e
 		return nil
 	}
 	return err
+}
+
+// pingCoordinator measures the network round trip to the coordinator
+// (best of three tiny requests, refreshed once a minute). The coordinator
+// uses it to tell a slow connection apart from a slow video card.
+func (a *Agent) pingCoordinator(ctx context.Context) float64 {
+	a.mu.Lock()
+	rtt, at := a.rttMS, a.rttTime
+	a.mu.Unlock()
+	if time.Since(at) < time.Minute && rtt > 0 {
+		return rtt
+	}
+	base := strings.TrimRight(a.Config.Get().Coordinator, "/")
+	best := 0.0
+	for i := 0; i < 3; i++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/healthz", nil)
+		if err != nil {
+			return 0
+		}
+		start := time.Now()
+		resp, err := a.HTTP.Do(req)
+		if err != nil {
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if i == 0 {
+			continue // the first one may pay for a new TLS connection
+		}
+		ms := float64(time.Since(start).Microseconds()) / 1000
+		if best == 0 || ms < best {
+			best = ms
+		}
+	}
+	a.mu.Lock()
+	a.rttMS, a.rttTime = best, time.Now()
+	a.mu.Unlock()
+	return best
 }
 
 // leaveChain frees the GPU and tells the coordinator at once, so the chain

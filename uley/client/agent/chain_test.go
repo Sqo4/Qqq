@@ -32,10 +32,10 @@ func TestChainEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	model := models.Model{ID: "test-chain", Name: "test", Chain: true, MinVRAMMB: 3000, ContextSize: 4096}
+	model := models.Model{ID: "test-chain", Name: "test", Chain: true, MinVRAMMB: 3000, ContextSize: 4096, Layers: 28}
 	chain, err := coordinator.NewChainManager(store, coordinator.ChainConfig{
 		Model: model, ModelPath: modelPath, HeadBin: filepath.Join(bin, "llama-server"),
-		LogDir: t.TempDir(), Parallel: 2, WorkerTTL: 10 * time.Second,
+		LogDir: t.TempDir(), Parallel: 2, WorkerTTL: 10 * time.Second, MinRounds: 3, MeasureEvery: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +90,14 @@ func TestChainEndToEnd(t *testing.T) {
 	if st.Chain.Members != 2 || st.Chain.State != "ready" {
 		t.Fatalf("expected a ready chain of two, got %+v", *st.Chain)
 	}
+
+	// The coordinator measured how long it waits for each link.
+	waitFor(t, "link speeds measured", func() bool {
+		cs := chain.Stats()
+		return len(cs.Links) == 2 && cs.Links[0].StepMS > 0 && cs.Links[1].StepMS > 0 && cs.WordMS > 0
+	})
+	cs := chain.Stats()
+	t.Logf("links: %+v, %.1f ms per step", cs.Links, cs.WordMS)
 
 	// Volunteer 1 starts a game: the chain must stop, then come back.
 	monitors[0].set(func(m *fakeMonitor) { m.fullscreen = true })

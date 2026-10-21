@@ -35,6 +35,9 @@ main{overflow:hidden;display:flex;flex-direction:column;min-width:0}
 .wide{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
 .meter{height:14px;background:#0f0c08;border-radius:7px;overflow:hidden;margin:10px 0 6px}.meter i{display:block;height:100%;background:var(--honey);border-radius:7px;transition:width .6s}
 .spark{width:100%;height:120px;display:block}.tip{position:absolute;pointer-events:none;background:#0f0c08;border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;white-space:nowrap}
+table.links{width:100%;border-collapse:collapse;font-size:14px}table.links th{text-align:left;color:var(--faint);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--line)}
+table.links td{padding:6px 8px;border-bottom:1px solid var(--line)}table.links .num{text-align:right;font-variant-numeric:tabular-nums}
+table.links tr.spare td{color:var(--faint)}.bar2{display:inline-block;height:8px;background:var(--honey);border-radius:4px;vertical-align:middle;margin-right:6px}
 .kv{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px}.kv b{color:var(--text)}
 /* chat */
 .chathead{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
@@ -119,7 +122,9 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
    <b>Общая большая модель</b>
    <div class="muted" id="chainMsg">–</div>
    <div class="meter"><i id="chainBar" style="width:0"></i></div>
-   <div class="kv"><span>Видеопамять участников: <b id="chainHave">–</b> из нужных <b id="chainNeed">–</b></span><span>В цепочке: <b id="chainMembers">–</b></span><span>В запасе: <b id="chainSpares">–</b></span></div>
+   <div class="kv"><span>Видеопамять участников: <b id="chainHave">–</b> из нужных <b id="chainNeed">–</b></span><span>В цепочке: <b id="chainMembers">–</b></span><span>В запасе: <b id="chainSpares">–</b></span><span>Скорость: <b id="chainSpeed">–</b></span></div>
+   <div style="overflow-x:auto;margin-top:12px"><table class="links" id="linksTable"><thead><tr><th>Звено</th><th>Видеокарта</th><th class="num">Слоёв</th><th class="num">Время шага</th><th class="num">Пинг</th></tr></thead><tbody id="links"></tbody></table></div>
+   <div class="muted small">Слои раздаются по замеренной скорости: быстрые видеокарты берут больше, медленные — меньше или ждут в запасе. Шаг ≈ одно слово.</div>
   </div>
   <div class="wide"><div class="kv"><span>Видеокарты: <b id="vendors">–</b></span><span>Задач решено: <b id="tDone">–</b></span><span>Проектов: <b id="tProjects">–</b></span><span>Сообщений за сутки: <b id="tMsgs">–</b></span></div></div>
 
@@ -210,8 +215,21 @@ function onStats(s){
  const c=s.chain;$('chainBox').classList.toggle('hidden',!c);
  if(c){$('chainMsg').textContent=c.message;$('chainHave').textContent=fmt(c.have_mb/1024)+' ГБ';$('chainNeed').textContent=fmt(c.need_mb/1024)+' ГБ';
   $('chainMembers').textContent=c.members;$('chainSpares').textContent=c.spares;
-  $('chainBar').style.width=Math.min(100,Math.round(c.have_mb/c.need_mb*100))+'%'}
+  $('chainBar').style.width=Math.min(100,Math.round(c.have_mb/c.need_mb*100))+'%';
+  $('chainSpeed').textContent=c.word_ms>0?'≈ '+fmt(1000/c.word_ms)+' слов/с ('+fmt(c.word_ms)+' мс на слово)':'замеряем…';
+  renderLinks(c.links||[])}
  S.history.push({t:Date.now(),u:util,used,cap});if(S.history.length>300)S.history.shift();drawSpark();
+}
+function renderLinks(links){
+ const tb=$('links');tb.replaceChildren();
+ const maxStep=Math.max(1,...links.map(l=>l.step_ms||0));
+ links.forEach((l,i)=>{const tr=document.createElement('tr');if(!l.in_chain)tr.className='spare';
+  const name=(l.name||('узел '+(i+1)));
+  const step=l.in_chain?(l.step_ms?'<span class="bar2" style="width:'+Math.round(l.step_ms/maxStep*60)+'px"></span>'+fmt(l.step_ms)+' мс':'замеряем…'):'в запасе';
+  tr.innerHTML='<td></td><td></td><td class="num"></td><td class="num">'+step+'</td><td class="num"></td>';
+  tr.children[0].textContent=(l.in_chain?'🐝 ':'⏸ ')+name;tr.children[1].textContent=l.gpu||'—';
+  tr.children[2].textContent=l.in_chain?l.layers:'—';tr.children[4].textContent=l.net_ms?fmt(l.net_ms)+' мс':'—';tb.append(tr)});
+ if(!links.length)tb.innerHTML='<tr><td colspan="5" class="muted">Пока никого</td></tr>';
 }
 function drawSpark(){
  const svg=$('spark'),h=S.history,W=600,H=120;if(h.length<2){svg.innerHTML='';return}

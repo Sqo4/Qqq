@@ -40,6 +40,22 @@ type worker struct {
 	dials    chan string
 	conns    map[net.Conn]bool
 	lastPoll time.Time
+	meter    meter
+}
+
+// meter adds up how long the head waits for the worker: from the moment
+// the head sends a request until the first byte of the answer comes back.
+// That is the worker's real share of the time per word, network included.
+type meter struct {
+	mu     sync.Mutex
+	wait   time.Duration
+	rounds int64
+}
+
+// MeterReading is the head's waiting time on one worker.
+type MeterReading struct {
+	Wait   time.Duration
+	Rounds int64
 }
 
 func NewRelay() *Relay {
@@ -141,11 +157,37 @@ func (r *Relay) bridge(nodeID string, w *worker, head net.Conn) {
 	}
 	w.conns[head], w.conns[remote] = true, true
 	r.mu.Unlock()
-	splice(head, remote)
+	meteredSplice(head, remote, &w.meter)
 	r.mu.Lock()
 	delete(w.conns, head)
 	delete(w.conns, remote)
 	r.mu.Unlock()
+}
+
+// Meter returns the waiting time measured on the worker since the last reset.
+func (r *Relay) Meter(nodeID string) (MeterReading, bool) {
+	r.mu.Lock()
+	w, ok := r.workers[nodeID]
+	r.mu.Unlock()
+	if !ok {
+		return MeterReading{}, false
+	}
+	w.meter.mu.Lock()
+	defer w.meter.mu.Unlock()
+	return MeterReading{Wait: w.meter.wait, Rounds: w.meter.rounds}, true
+}
+
+// ResetMeter starts a new measurement window (e.g. once a chain is loaded,
+// so the weight upload is not counted as slowness).
+func (r *Relay) ResetMeter(nodeID string) {
+	r.mu.Lock()
+	w, ok := r.workers[nodeID]
+	r.mu.Unlock()
+	if ok {
+		w.meter.mu.Lock()
+		w.meter.wait, w.meter.rounds = 0, 0
+		w.meter.mu.Unlock()
+	}
 }
 
 // WaitDial blocks until the coordinator needs a new stream to the worker
@@ -232,6 +274,57 @@ func splice(a, b net.Conn) {
 	<-done
 	a.Close()
 	b.Close()
+	<-done
+}
+
+// meteredSplice is splice that times request/answer rounds from head to
+// worker and back.
+func meteredSplice(head, worker net.Conn, m *meter) {
+	var mu sync.Mutex
+	pending := false
+	var start time.Time
+	done := make(chan struct{}, 2)
+	cp := func(dst, src net.Conn, onData func()) {
+		buf := make([]byte, 64<<10)
+		for {
+			n, err := src.Read(buf)
+			if n > 0 {
+				onData()
+				if _, werr := dst.Write(buf[:n]); werr != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		if c, ok := dst.(interface{ CloseWrite() error }); ok {
+			c.CloseWrite()
+		}
+		done <- struct{}{}
+	}
+	go cp(worker, head, func() { // a request goes out
+		mu.Lock()
+		if !pending {
+			pending, start = true, time.Now()
+		}
+		mu.Unlock()
+	})
+	go cp(head, worker, func() { // the answer starts coming back
+		mu.Lock()
+		if pending {
+			pending = false
+			d := time.Since(start)
+			m.mu.Lock()
+			m.wait += d
+			m.rounds++
+			m.mu.Unlock()
+		}
+		mu.Unlock()
+	})
+	<-done
+	head.Close()
+	worker.Close()
 	<-done
 }
 
