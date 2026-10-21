@@ -187,7 +187,8 @@ func (s *Store) GetTask(id string) (protocol.Task, error) {
 }
 
 // Assign hands the oldest suitable task to nodeID, or returns nil. A node
-// never gets two replicas of the same task.
+// never gets two replicas of the same task; it may retry a task it failed
+// (e.g. paused because its owner started a game).
 func (s *Store) Assign(nodeID string, models []string, timeout time.Duration) (*protocol.Job, error) {
 	if len(models) == 0 {
 		return nil, nil
@@ -206,7 +207,7 @@ func (s *Store) Assign(nodeID string, models []string, timeout time.Duration) (*
 	q := `SELECT t.id, t.model, t.payload FROM tasks t
 		WHERE t.status IN (?,?) AND t.model IN (` + strings.TrimSuffix(strings.Repeat("?,", len(models)), ",") + `)
 		AND (SELECT COUNT(*) FROM assignments a WHERE a.task_id=t.id AND a.status IN ('running','done')) < t.replicas
-		AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.task_id=t.id AND a.node_id=?)
+		AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.task_id=t.id AND a.node_id=? AND a.status IN ('running','done'))
 		ORDER BY t.created_at, t.rowid LIMIT 1`
 	var taskID, model, payload string
 	err = tx.QueryRow(q, args...).Scan(&taskID, &model, &payload)

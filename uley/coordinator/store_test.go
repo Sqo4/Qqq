@@ -196,3 +196,15 @@ func TestSimilar(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeMayRetryAfterFailure(t *testing.T) {
+	s, _ := newTestStore(t)
+	n := addNode(t, s)
+	id, _ := s.CreateTask("qwen3-0.6b", greedy, 1)
+	j := mustAssign(t, s, n)
+	s.Complete(n, j.ID, protocol.JobResult{Error: "interrupted"})
+	j2 := mustAssign(t, s, n)
+	if j2 == nil || j2.TaskID != id {
+		t.Fatal("a lone node must be able to retry after an interruption")
+	}
+}
