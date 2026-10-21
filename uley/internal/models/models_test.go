@@ -29,6 +29,9 @@ func TestBest(t *testing.T) {
 	if _, ok := Best(1000, ""); ok {
 		t.Fatal("nothing should fit into 1 GB")
 	}
+	if m, _ := Best(1<<20, ""); m.Chain {
+		t.Fatal("a chain model must never be picked for a single GPU")
+	}
 	if m, _ := Best(8192, ""); m.ID != "qwen3-8b" {
 		t.Fatalf("8 GB: got %s", m.ID)
 	}

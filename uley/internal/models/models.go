@@ -16,6 +16,10 @@ type Model struct {
 	MinVRAMMB   int    `json:"min_vram_mb"` // weights + KV cache for ContextSize
 	ContextSize int    `json:"context_size"`
 	License     string `json:"license"`
+	// Chain models are too big for one gamer GPU: the coordinator keeps
+	// the file and spreads the layers over a chain of volunteer GPUs.
+	// For them MinVRAMMB is the total video memory the chain needs.
+	Chain bool `json:"chain,omitempty"`
 }
 
 // Hashes are the LFS sha256 values published by Hugging Face for the
@@ -65,6 +69,18 @@ var whitelist = []Model{
 		ContextSize: 4096,
 		License:     "Apache-2.0",
 	},
+	{
+		ID:          "qwen3-32b",
+		Name:        "Qwen3 32B (Q4_K_M), общая модель улья",
+		File:        "Qwen3-32B-Q4_K_M.gguf",
+		URL:         "https://huggingface.co/Qwen/Qwen3-32B-GGUF/resolve/main/Qwen3-32B-Q4_K_M.gguf",
+		SHA256:      "efd971561896866f0e910cce52761ca77b1b138090c7f15fe284676d57d1f689",
+		SizeBytes:   19762149024,
+		MinVRAMMB:   25600, // weights + KV cache for 4 parallel chats + buffers
+		ContextSize: 16384, // shared by 4 parallel chats
+		License:     "Apache-2.0",
+		Chain:       true,
+	},
 }
 
 // All returns the whitelist ordered from the smallest to the largest model.
@@ -86,13 +102,13 @@ func Get(id string) (Model, bool) {
 // Best picks the largest model that fits into vramMB. If preferred is a
 // whitelisted model that fits, it wins. ok is false when nothing fits.
 func Best(vramMB int, preferred string) (Model, bool) {
-	if m, found := Get(preferred); found && m.MinVRAMMB <= vramMB {
+	if m, found := Get(preferred); found && !m.Chain && m.MinVRAMMB <= vramMB {
 		return m, true
 	}
 	var best Model
 	ok := false
 	for _, m := range All() {
-		if m.MinVRAMMB <= vramMB {
+		if !m.Chain && m.MinVRAMMB <= vramMB {
 			best, ok = m, true
 		}
 	}

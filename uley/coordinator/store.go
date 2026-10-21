@@ -504,6 +504,15 @@ func (s *Store) WantedModels() ([]string, error) {
 	return out, rows.Err()
 }
 
+// NodeLoad returns a node's measured speed (tokens/s per request) and how
+// many of its assignments are running now.
+func (s *Store) NodeLoad(nodeID string) (speed float64, running int) {
+	s.db.QueryRow(`SELECT COALESCE(SUM(tokens_out)*1000.0/SUM(duration_ms),0) FROM assignments
+		WHERE node_id=? AND status='done' AND duration_ms>0 AND finished_at>?`, nodeID, s.now().Unix()-86400).Scan(&speed)
+	s.db.QueryRow(`SELECT COUNT(*) FROM assignments WHERE node_id=? AND status='running'`, nodeID).Scan(&running)
+	return speed, running
+}
+
 // onlineWindow is how long a node counts as online after its last contact.
 const onlineWindow = 90 * time.Second
 
@@ -540,7 +549,7 @@ func (s *Store) Stats() (protocol.Stats, error) {
 		avg += v / float64(len(speed))
 	}
 
-	rows, err := s.db.Query(`SELECT id, state, vram_mb, gpus, models FROM nodes WHERE last_seen>=? AND banned=0`, since)
+	rows, err := s.db.Query(`SELECT id, state, vram_mb, gpus, models FROM nodes WHERE last_seen>=? AND banned=0 AND os!='chain'`, since)
 	if err != nil {
 		return st, err
 	}
@@ -553,7 +562,9 @@ func (s *Store) Stats() (protocol.Stats, error) {
 		}
 		st.NodesOnline++
 		st.VRAMOnlineMB += vram
-		if state == protocol.StateWorking || busy[id] {
+		if state == protocol.StateChain {
+			st.NodesWorking++ // its share is counted with the chain
+		} else if state == protocol.StateWorking || busy[id] {
 			st.NodesWorking++
 			v, ok := speed[id]
 			if !ok {
@@ -577,7 +588,7 @@ func (s *Store) Stats() (protocol.Stats, error) {
 		}
 	}
 	rows.Close()
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM nodes`).Scan(&st.NodesTotal); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM nodes WHERE os!='chain'`).Scan(&st.NodesTotal); err != nil {
 		return st, err
 	}
 	err = s.db.QueryRow(`SELECT
@@ -597,8 +608,8 @@ func (s *Store) Stats() (protocol.Stats, error) {
 		return st, err
 	}
 	st.TokensPerSec = float64(recent) / float64(window)
-	if st.NodesWorking > 0 {
-		st.Utilization = float64(st.NodesBusy) / float64(st.NodesWorking)
+	if st.CapacityTPS > 0 {
+		st.Utilization = min(st.UsedTPS/st.CapacityTPS, 1)
 	}
 	s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&st.UsersTotal)
 	s.db.QueryRow(`SELECT COUNT(*) FROM projects`).Scan(&st.ProjectsTotal)

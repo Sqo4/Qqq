@@ -39,6 +39,10 @@ type Config struct {
 	PollMax    time.Duration
 	// Web holds the dashboard and download pages.
 	Web fs.FS
+	// HiveModel is the one model the hive serves; tasks may omit it.
+	HiveModel string
+	// Chain, if set, runs HiveModel as a chain of volunteer GPUs.
+	Chain *ChainManager
 }
 
 func (c *Config) defaults() {
@@ -74,6 +78,14 @@ func NewServer(store *Store, cfg Config) *Server {
 	s.mux.HandleFunc("POST /v1/chat/completions", s.apiAuth(s.handleChatCompletions))
 	s.mux.HandleFunc("GET "+p+"/stats", s.handleStats)
 	s.mux.HandleFunc("GET "+p+"/models", s.handleModels)
+	s.mux.HandleFunc("GET "+p+"/hive", s.handleHive)
+	if cfg.Chain != nil {
+		cfg.Chain.bell = s.bell
+		cfg.Chain.timeout = max(cfg.JobTimeout, 15*time.Minute) // a chain writes slower
+		s.mux.HandleFunc("GET "+p+"/chain/wait", s.nodeAuth(s.handleChainWait))
+		s.mux.HandleFunc("GET "+p+"/chain/dial", s.nodeAuth(cfg.Chain.relay.HandleUpgrade))
+		s.mux.HandleFunc("POST "+p+"/chain/leave", s.nodeAuth(s.handleChainLeave))
+	}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	if cfg.Web != nil {
 		s.mux.HandleFunc("GET /{$}", s.page("index.html"))
@@ -90,6 +102,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Run sweeps expired assignments until ctx is done.
 func (s *Server) Run(ctx context.Context) {
+	if s.cfg.Chain != nil {
+		go s.cfg.Chain.Run(ctx)
+	}
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {
@@ -380,12 +395,20 @@ func validate(req protocol.SubmitRequest) (taskPayload, error) {
 }
 
 func (s *Server) submit(req protocol.SubmitRequest) (string, error) {
+	if s.cfg.HiveModel != "" {
+		if req.Model == "" {
+			req.Model = s.cfg.HiveModel
+		}
+		if req.Model != s.cfg.HiveModel {
+			return "", fmt.Errorf("this hive runs only %s", s.cfg.HiveModel)
+		}
+	}
 	p, err := validate(req)
 	if err != nil {
 		return "", err
 	}
 	replicas := 1
-	if p.Temperature == 0 && rand.Float64() < s.cfg.VerifyRate {
+	if p.Temperature == 0 && rand.Float64() < s.cfg.VerifyRate && s.cfg.Chain == nil {
 		replicas = 2
 	}
 	id, err := s.store.CreateTask(req.Model, p, replicas)
@@ -479,7 +502,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
-	st, err := s.store.Stats()
+	st, err := s.Stats()
 	if err != nil {
 		log.Printf("stats: %v", err)
 		writeErr(w, http.StatusInternalServerError, "store error")
@@ -487,6 +510,63 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	writeJSON(w, http.StatusOK, st)
+}
+
+// Stats is the live state of the hive, chain included.
+func (s *Server) Stats() (protocol.Stats, error) {
+	st, err := s.store.Stats()
+	if err != nil {
+		return st, err
+	}
+	st.HiveModel = s.cfg.HiveModel
+	if c := s.cfg.Chain; c != nil {
+		cs := c.Stats()
+		st.Chain = &cs
+		if cs.State == "ready" {
+			speed, running := s.store.NodeLoad(c.nodeID)
+			if speed == 0 {
+				speed = 3 // not measured yet: a modest guess for an internet chain
+			}
+			// One chain answers Parallel chats at about the same speed each.
+			st.CapacityTPS += speed * float64(c.cfg.Parallel)
+			st.UsedTPS += speed * float64(min(running, c.cfg.Parallel))
+		}
+	}
+	if st.CapacityTPS > 0 {
+		st.Utilization = min(st.UsedTPS/st.CapacityTPS, 1)
+	}
+	return st, nil
+}
+
+func (s *Server) handleHive(w http.ResponseWriter, r *http.Request) {
+	h := protocol.Hive{Mode: protocol.ModeSingle, Model: s.cfg.HiveModel}
+	if s.cfg.Chain != nil {
+		h.Mode = protocol.ModeChain
+	}
+	writeJSON(w, http.StatusOK, h)
+}
+
+func (s *Server) handleChainWait(w http.ResponseWriter, r *http.Request) {
+	budget, _ := strconv.Atoi(r.URL.Query().Get("budget"))
+	if budget < 0 || budget > 1<<20 {
+		budget = 0
+	}
+	in, err := s.cfg.Chain.Touch(nodeID(r), budget)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.store.Touch(nodeID(r))
+	tok, err := s.cfg.Chain.relay.WaitDial(r.Context(), nodeID(r), 20*time.Second)
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, protocol.ChainWait{Dial: tok, InChain: in})
+}
+
+func (s *Server) handleChainLeave(w http.ResponseWriter, r *http.Request) {
+	s.cfg.Chain.Leave(nodeID(r))
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {

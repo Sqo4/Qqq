@@ -63,17 +63,17 @@ func fromEngine(path string) []protocol.GPU {
 }
 
 // Lines look like "  Vulkan0: NVIDIA GeForce RTX 3060 (12288 MiB, 11593 MiB free)".
-var deviceLine = regexp.MustCompile(`(?m)^\s*([A-Za-z]+)\d+:\s*(.+?)\s*\((\d+) MiB`)
+var deviceLine = regexp.MustCompile(`(?m)^\s*(([A-Za-z]+)\d+):\s*(.+?)\s*\((\d+) MiB`)
 
 func ParseDeviceList(out string) []protocol.GPU {
 	var gpus []protocol.GPU
 	for _, m := range deviceLine.FindAllStringSubmatch(out, -1) {
-		mb, _ := strconv.Atoi(m[3])
-		backend := strings.ToLower(m[1])
+		mb, _ := strconv.Atoi(m[4])
+		backend := strings.ToLower(m[2])
 		if backend == "mtl" {
 			backend = "metal"
 		}
-		gpus = append(gpus, protocol.GPU{Name: m[2], Vendor: VendorOf(m[2]), VRAMMB: mb, Backend: backend})
+		gpus = append(gpus, protocol.GPU{Device: m[1], Name: m[3], Vendor: VendorOf(m[3]), VRAMMB: mb, Backend: backend})
 	}
 	return gpus
 }

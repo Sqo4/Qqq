@@ -10,16 +10,21 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/sqo4/uley/client/download"
 	"github.com/sqo4/uley/coordinator"
+	"github.com/sqo4/uley/internal/models"
 	"github.com/sqo4/uley/web"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -33,6 +38,46 @@ func env(name, def string) string {
 	return def
 }
 
+// fetchModel downloads the chain model (resuming, SHA-256 checked) and
+// hands it to the chain manager.
+func fetchModel(ctx context.Context, chain *coordinator.ChainManager, m models.Model, dir string) {
+	last := time.Time{}
+	for ctx.Err() == nil {
+		p, err := download.Fetch(ctx, &http.Client{}, dir, m, func(done, total int64) {
+			if time.Since(last) > 5*time.Second {
+				last = time.Now()
+				chain.SetMessage(fmt.Sprintf("Сервер скачивает модель: %d%%", done*100/total))
+			}
+		})
+		if err == nil {
+			log.Printf("model %s ready at %s", m.ID, p)
+			chain.SetModelPath(p)
+			return
+		}
+		log.Printf("model download: %v (retrying in a minute)", err)
+		chain.SetMessage("Не удалось скачать модель, пробуем снова: " + err.Error())
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Minute):
+		}
+	}
+}
+
+func findLlamaServer() string {
+	name := "llama-server"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), "engine", name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	p, _ := exec.LookPath(name)
+	return p
+}
+
 func main() {
 	addr := flag.String("addr", env("ULEY_ADDR", "127.0.0.1:8080"), "listen address (ignored with -domain)")
 	domain := flag.String("domain", env("ULEY_DOMAIN", ""), "public domain; enables automatic HTTPS via Let's Encrypt")
@@ -41,6 +86,9 @@ func main() {
 	joinKey := flag.String("join-key", env("ULEY_JOIN_KEY", ""), "optional key nodes must know to register")
 	verify := flag.Float64("verify-rate", 0.1, "share of temperature-0 tasks computed twice for verification")
 	jobTimeout := flag.Duration("job-timeout", 3*time.Minute, "time a node has to finish a job")
+	hiveModel := flag.String("model", env("ULEY_MODEL", "qwen3-32b"), "the one model the hive serves (see /api/v1/models); a chain model is split over volunteer GPUs")
+	modelDir := flag.String("model-dir", env("ULEY_MODEL_DIR", ""), "where the coordinator keeps a chain model (default: models/ next to the database)")
+	headBin := flag.String("llama-server", env("ULEY_LLAMA_SERVER", ""), "llama-server binary that drives the chain (default: engine/ next to this program, then PATH)")
 	flag.Parse()
 
 	store, err := coordinator.OpenStore(*dbPath)
@@ -58,12 +106,39 @@ func main() {
 	if len(keys) == 0 {
 		log.Printf("WARNING: no -api-keys set, anyone can submit tasks")
 	}
-	srv := coordinator.NewServer(store, coordinator.Config{
-		APIKeys: keys, JoinKey: *joinKey, VerifyRate: *verify, JobTimeout: *jobTimeout, Web: web.FS,
-	})
-
+	model, ok := models.Get(*hiveModel)
+	if !ok {
+		log.Fatalf("unknown model %q", *hiveModel)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	cfg := coordinator.Config{
+		APIKeys: keys, JoinKey: *joinKey, VerifyRate: *verify, JobTimeout: *jobTimeout, Web: web.FS,
+		HiveModel: model.ID,
+	}
+	if model.Chain {
+		head := *headBin
+		if head == "" {
+			head = findLlamaServer()
+		}
+		if head == "" {
+			log.Fatal("chain model needs llama-server: put it into engine/ next to this program or pass -llama-server")
+		}
+		dir := *modelDir
+		if dir == "" {
+			dir = filepath.Join(filepath.Dir(*dbPath), "models")
+		}
+		chain, err := coordinator.NewChainManager(store, coordinator.ChainConfig{
+			Model: model, HeadBin: head, LogDir: filepath.Join(filepath.Dir(*dbPath), "logs"),
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.Chain = chain
+		go fetchModel(ctx, chain, model, dir)
+	}
+	srv := coordinator.NewServer(store, cfg)
 	go srv.Run(ctx)
 
 	hs := &http.Server{Handler: srv, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}

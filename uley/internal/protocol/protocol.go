@@ -22,10 +22,43 @@ const (
 	StatePaused      = "paused"      // paused by the user or by a rule
 	StatePreparing   = "preparing"   // downloading a model / starting the engine
 	StateUnsupported = "unsupported" // no suitable GPU
+	StateChain       = "chain"       // lends its GPU to a chain running the big model
 )
+
+// Hive tells nodes how the hive runs right now.
+type Hive struct {
+	// Mode is "single" (every node runs a whole small model) or "chain"
+	// (nodes hold layers of one big model).
+	Mode  string `json:"mode"`
+	Model string `json:"model"`
+}
+
+const (
+	ModeSingle = "single"
+	ModeChain  = "chain"
+)
+
+// ChainWait is the reply to a chain worker's long poll.
+type ChainWait struct {
+	Dial    string `json:"dial,omitempty"` // open a stream with this token
+	InChain bool   `json:"in_chain"`
+}
+
+// ChainStats describe the big model's chains for the live dashboard.
+type ChainStats struct {
+	Model    string `json:"model"`
+	State    string `json:"state"` // waiting, loading, ready
+	Message  string `json:"message"`
+	Members  int    `json:"members"`
+	Spares   int    `json:"spares"`
+	NeedMB   int    `json:"need_mb"`
+	HaveMB   int    `json:"have_mb"` // video memory of all chain volunteers online
+	ChainsUp int    `json:"chains_up"`
+}
 
 // GPU is everything a node tells the coordinator about its hardware.
 type GPU struct {
+	Device  string `json:"device,omitempty"` // engine device name, e.g. Vulkan0
 	Name    string `json:"name"`
 	Vendor  string `json:"vendor"` // nvidia, amd, intel, apple, other
 	VRAMMB  int    `json:"vram_mb"`
@@ -140,6 +173,7 @@ type Stats struct {
 	UsersTotal    int            `json:"users_total"`
 	ProjectsTotal int            `json:"projects_total"`
 	MessagesToday int            `json:"messages_today"`
+	Chain         *ChainStats    `json:"chain,omitempty"`
 	NodesOnline   int            `json:"nodes_online"`
 	NodesWorking  int            `json:"nodes_working"`
 	NodesTotal    int            `json:"nodes_total"`

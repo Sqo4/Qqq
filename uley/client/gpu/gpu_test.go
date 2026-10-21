@@ -16,6 +16,9 @@ Available devices:
 	if g[0].Vendor != "nvidia" || g[0].VRAMMB != 12288 || g[0].Backend != "vulkan" || g[0].Name != "NVIDIA GeForce RTX 3060" {
 		t.Errorf("bad first: %+v", g[0])
 	}
+	if g[0].Device != "Vulkan0" || g[2].Device != "MTL0" {
+		t.Errorf("bad device names: %+v", g)
+	}
 	if g[1].Vendor != "amd" || g[2].Vendor != "apple" || g[2].Backend != "metal" {
 		t.Errorf("bad vendors: %+v", g)
 	}

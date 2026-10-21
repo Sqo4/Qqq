@@ -28,6 +28,7 @@ import (
 	"github.com/sqo4/uley/client/sysmon"
 	"github.com/sqo4/uley/internal/models"
 	"github.com/sqo4/uley/internal/protocol"
+	"github.com/sqo4/uley/internal/rpctunnel"
 )
 
 type Agent struct {
@@ -47,12 +48,17 @@ type Agent struct {
 	Tick time.Duration
 	// HeartbeatEvery is the heartbeat interval.
 	HeartbeatEvery time.Duration
+	// RPC lends the GPU to a chain running the hive's big model; nil if
+	// this build has no rpc-server.
+	RPC *engine.RPCServer
 
-	once   sync.Once
-	mu     sync.Mutex
-	status Status
-	gpus   []protocol.GPU
-	kick   chan struct{}
+	once     sync.Once
+	mu       sync.Mutex
+	status   Status
+	gpus     []protocol.GPU
+	kick     chan struct{}
+	hive     protocol.Hive
+	hiveTime time.Time
 }
 
 // Status is a snapshot for the tray and the settings page.
@@ -68,7 +74,9 @@ type Status struct {
 	LastError   string         `json:"last_error,omitempty"`
 	Connected   bool           `json:"connected"`
 	IdleUnknown bool           `json:"idle_unknown"`
-	Busy        bool           `json:"busy"` // a job is running right now
+	Busy        bool           `json:"busy"`     // a job is running right now
+	Mode        string         `json:"mode"`     // single or chain
+	InChain     bool           `json:"in_chain"` // holds layers of the big model now
 }
 
 func (a *Agent) init() {
@@ -235,7 +243,12 @@ func (a *Agent) step(ctx context.Context) error {
 		if a.Engine.Loaded() != "" {
 			a.Engine.Unload() // give the video memory back right away
 		}
-		a.update(func(st *Status) { st.State, st.Reason, st.Model, st.Busy = protocol.StatePaused, reason, "", false })
+		if a.RPC != nil && a.RPC.Running() {
+			a.leaveChain(ctx)
+		}
+		a.update(func(st *Status) {
+			st.State, st.Reason, st.Model, st.Busy, st.InChain = protocol.StatePaused, reason, "", false, false
+		})
 		a.sleep(ctx, a.Tick)
 		return nil
 	}
@@ -247,7 +260,21 @@ func (a *Agent) step(ctx context.Context) error {
 	}
 	budget := a.budget(s)
 	a.update(func(st *Status) { st.VRAMBudget = budget })
+	hive, err := a.hiveInfo(ctx, s)
+	if err != nil {
+		return fmt.Errorf("hive info: %w", err)
+	}
+	a.update(func(st *Status) { st.Mode = hive.Mode })
+	if hive.Mode == protocol.ModeChain {
+		return a.chainStep(ctx, hive, budget)
+	}
+	if hive.Model != "" {
+		s.Model = hive.Model // the hive serves one model
+	}
 	m, ok := models.Best(budget, s.Model)
+	if ok && hive.Model != "" && m.ID != hive.Model {
+		ok = false
+	}
 	if !ok {
 		a.update(func(st *Status) {
 			st.State, st.Reason = protocol.StateUnsupported, "Не нашли видеокарту с достаточным объёмом памяти"
@@ -295,6 +322,106 @@ func (a *Agent) step(ctx context.Context) error {
 	return a.runJob(ctx, work, s, *job)
 }
 
+// hiveInfo asks the coordinator how the hive runs, at most once a minute.
+func (a *Agent) hiveInfo(ctx context.Context, s config.Settings) (protocol.Hive, error) {
+	a.mu.Lock()
+	h, at := a.hive, a.hiveTime
+	a.mu.Unlock()
+	if time.Since(at) < time.Minute && h.Mode != "" {
+		return h, nil
+	}
+	code, err := a.call(ctx, http.MethodGet, s.Coordinator, "", "/hive", nil, &h)
+	if code == http.StatusNotFound {
+		h, err = protocol.Hive{Mode: protocol.ModeSingle}, nil // older coordinator
+	}
+	if err != nil {
+		return h, err
+	}
+	a.mu.Lock()
+	a.hive, a.hiveTime = h, time.Now()
+	a.mu.Unlock()
+	return h, nil
+}
+
+// minChainMB: a smaller GPU is not worth a network hop in the chain.
+const minChainMB = 1536
+
+// chainStep lends the GPU to the chain until a pause rule fires.
+func (a *Agent) chainStep(ctx context.Context, hive protocol.Hive, budget int) error {
+	if a.RPC == nil || budget < minChainMB {
+		a.update(func(st *Status) {
+			st.State, st.Reason = protocol.StateUnsupported, "Видеокарта не подходит для общей модели улья"
+		})
+		a.sleep(ctx, time.Minute)
+		return nil
+	}
+	if a.Engine.Loaded() != "" {
+		a.Engine.Unload()
+	}
+	work, cancel := a.pauseAware(ctx)
+	defer cancel()
+
+	a.RPC.Device = bestDevice(a.Status().GPUs)
+	local, err := a.RPC.Start()
+	if err != nil {
+		return err
+	}
+	a.update(func(st *Status) {
+		st.State, st.Model, st.LastError = protocol.StateChain, hive.Model, ""
+		st.Reason = "В запасе: ждём места в цепочке общей модели"
+	})
+	poll := func(pctx context.Context) (string, error) {
+		if !a.RPC.Running() {
+			return "", errors.New("rpc-server stopped")
+		}
+		var w protocol.ChainWait
+		_, err := a.api(pctx, http.MethodGet, fmt.Sprintf("/chain/wait?budget=%d", budget), nil, &w)
+		if err != nil {
+			return "", err
+		}
+		a.update(func(st *Status) {
+			st.InChain = w.InChain
+			if w.InChain {
+				st.Reason = "Держим часть общей модели улья"
+			} else {
+				st.Reason = "В запасе: ждём места в цепочке общей модели"
+			}
+		})
+		return w.Dial, nil
+	}
+	dial := func(dctx context.Context, tok string) (net.Conn, error) {
+		return rpctunnel.Dial(dctx, a.Config.Get().Coordinator, protocol.APIPrefix+"/chain/dial?t="+url.QueryEscape(tok),
+			a.Config.Identity().Token, nil)
+	}
+	err = rpctunnel.Serve(work, local, poll, dial)
+	paused := work.Err() != nil && ctx.Err() == nil
+	a.leaveChain(ctx)
+	if paused {
+		return nil
+	}
+	return err
+}
+
+// leaveChain frees the GPU and tells the coordinator at once, so the chain
+// is rebuilt without waiting for a timeout.
+func (a *Agent) leaveChain(ctx context.Context) {
+	a.RPC.Stop()
+	a.update(func(st *Status) { st.InChain = false })
+	lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	a.api(lctx, http.MethodPost, "/chain/leave", struct{}{}, nil)
+}
+
+func bestDevice(gpus []protocol.GPU) string {
+	best, dev := 0, ""
+	for _, g := range gpus {
+		if g.Device != "" && g.VRAMMB > best {
+			best, dev = g.VRAMMB, g.Device
+		}
+	}
+	return dev
+}
+
 func (a *Agent) runJob(ctx, work context.Context, s config.Settings, job protocol.Job) error {
 	a.update(func(st *Status) { st.Busy, st.Reason = true, "Выполняем задачу" })
 	defer a.update(func(st *Status) { st.Busy = false })
@@ -326,7 +453,7 @@ func (a *Agent) runJob(ctx, work context.Context, s config.Settings, job protoco
 	// Report even when paused, so the job goes to someone else at once.
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if _, err := a.api(rctx, "/jobs/"+url.PathEscape(job.ID)+"/result", res, nil); err != nil {
+	if _, err := a.api(rctx, http.MethodPost, "/jobs/"+url.PathEscape(job.ID)+"/result", res, nil); err != nil {
 		return fmt.Errorf("send result: %w", err)
 	}
 	if res.Error == "" {
@@ -386,7 +513,7 @@ func (a *Agent) ensureRegistered(ctx context.Context, s config.Settings) error {
 		ClientVersion: a.Version, GPUs: a.Status().GPUs,
 	}
 	var resp protocol.RegisterResponse
-	if _, err := a.call(ctx, s.Coordinator, "", "/nodes/register", req, &resp); err != nil {
+	if _, err := a.call(ctx, http.MethodPost, s.Coordinator, "", "/nodes/register", req, &resp); err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
 	return a.Config.SetIdentity(config.Identity{Coordinator: s.Coordinator, NodeID: resp.NodeID, Token: resp.Token})
@@ -394,7 +521,7 @@ func (a *Agent) ensureRegistered(ctx context.Context, s config.Settings) error {
 
 func (a *Agent) poll(ctx context.Context, model string) (*protocol.Job, error) {
 	var job protocol.Job
-	code, err := a.api(ctx, "/jobs/poll", protocol.PollRequest{Models: []string{model}, WaitSeconds: 25}, &job)
+	code, err := a.api(ctx, http.MethodPost, "/jobs/poll", protocol.PollRequest{Models: []string{model}, WaitSeconds: 25}, &job)
 	if err != nil || code == http.StatusNoContent {
 		return nil, err
 	}
@@ -423,11 +550,11 @@ func (a *Agent) heartbeatLoop(ctx context.Context) {
 			State: st.State, StateReason: st.Reason, ClientVersion: a.Version,
 			GPUs: st.GPUs, VRAMBudgetMB: st.VRAMBudget,
 		}
-		if st.State == protocol.StateWorking && st.Model != "" {
+		if (st.State == protocol.StateWorking || st.InChain) && st.Model != "" {
 			hb.Models = []string{st.Model}
 		}
 		hctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		_, err := a.api(hctx, "/nodes/heartbeat", hb, nil)
+		_, err := a.api(hctx, http.MethodPost, "/nodes/heartbeat", hb, nil)
 		cancel()
 		if err != nil && ctx.Err() == nil {
 			log.Printf("heartbeat: %v", err)
@@ -436,12 +563,12 @@ func (a *Agent) heartbeatLoop(ctx context.Context) {
 }
 
 // api calls the coordinator as this node.
-func (a *Agent) api(ctx context.Context, path string, in, out any) (int, error) {
+func (a *Agent) api(ctx context.Context, method, path string, in, out any) (int, error) {
 	s := a.Config.Get()
 	if err := CheckCoordinatorURL(s.Coordinator, a.AllowInsecure); err != nil {
 		return 0, err
 	}
-	code, err := a.call(ctx, s.Coordinator, a.Config.Identity().Token, path, in, out)
+	code, err := a.call(ctx, method, s.Coordinator, a.Config.Identity().Token, path, in, out)
 	if code == http.StatusUnauthorized {
 		// The coordinator forgot us (e.g. its database was reset).
 		a.Config.SetIdentity(config.Identity{})
@@ -449,9 +576,13 @@ func (a *Agent) api(ctx context.Context, path string, in, out any) (int, error) 
 	return code, err
 }
 
-func (a *Agent) call(ctx context.Context, base, token, path string, in, out any) (int, error) {
-	body, _ := json.Marshal(in)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+protocol.APIPrefix+path, bytes.NewReader(body))
+func (a *Agent) call(ctx context.Context, method, base, token, path string, in, out any) (int, error) {
+	var body io.Reader
+	if in != nil {
+		b, _ := json.Marshal(in)
+		body = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(base, "/")+protocol.APIPrefix+path, body)
 	if err != nil {
 		return 0, err
 	}
