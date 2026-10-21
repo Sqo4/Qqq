@@ -56,7 +56,7 @@ def main():
     src = os.path.dirname(server)
     os.makedirs(out, exist_ok=True)
     # Keep only the server and the shared libraries it needs.
-    keep = re.compile(r"(llama-server(\.exe)?|.*\.(dll|so(\.\d+)*|dylib|metal|metallib)|LICENSE.*)$")
+    keep = re.compile(r"((llama|ggml-rpc|rpc)-server(\.exe)?|.*\.(dll|so(\.\d+)*|dylib|metal|metallib)|LICENSE.*)$")
     for f in os.listdir(src):
         p = os.path.join(src, f)
         if os.path.isfile(p) and keep.fullmatch(f):
