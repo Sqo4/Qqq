@@ -93,6 +93,7 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
  <div class="item" data-view="board"><span>📊</span><span class="t">Мощности улья</span></div>
  <div id="navUser" class="hidden">
   <div class="item" data-chat="lobby"><span>💬</span><span class="t">Общий чат</span><span class="badge hidden"></span></div>
+  <div class="item" id="mindBtn"><span>🧠</span><span class="t">Что Улей помнит</span></div>
   <h4>Мои чаты <button class="ghost" id="newChat">＋</button></h4>
   <div id="chatList"></div>
   <h4>Проекты <span><button class="ghost" id="joinBtn" title="Вступить по коду">🔑</button> <button class="ghost" id="newProject">＋</button></span></h4>
@@ -149,6 +150,7 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
   <div class="chathead">
    <h3 id="chatTitle"></h3>
    <span id="projInfo" class="small muted"></span>
+   <button class="ghost small hidden" id="projMindBtn">🧠 Память проекта</button>
    <button class="ghost small hidden" id="shareBtn">Поделиться в общем чате</button>
    <button class="ghost small hidden" id="renameBtn">Переименовать</button>
    <button class="ghost small hidden" id="deleteBtn">Удалить</button>
@@ -188,6 +190,18 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
  <pre class="code" id="hermesCfg" style="white-space:pre;overflow-x:auto;margin-top:8px"></pre>
  <p class="small muted" id="ctxNote"></p>
  <div class="row"><button value="close">Готово</button></div>
+</form></dialog>
+<dialog id="dlgMind" style="width:min(640px,94vw)"><form method="dialog">
+ <h3 style="margin-top:0" id="mindTitle">Что Улей помнит</h3>
+ <p class="small muted" id="mindNote"></p>
+ <div class="tabs"><button type="button" id="tabMem">Память</button><button type="button" class="ghost" id="tabSkills">Навыки</button><button type="button" class="ghost" id="tabSched">Задания</button></div>
+ <div id="mindMem">
+  <div class="row" style="justify-content:flex-start;margin:8px 0"><input id="memText" maxlength="500" placeholder="Добавить факт, например «Я на 2 курсе физфака»" style="flex:1"><button type="button" id="memAdd">Добавить</button></div>
+  <div id="memList"></div>
+ </div>
+ <div id="mindSkills" class="hidden"><div id="skillList"></div><p class="small muted">Навык — сохранённая инструкция для повторяющейся задачи. Попросите Улей: «сохрани это как навык».</p></div>
+ <div id="mindSched" class="hidden"><div id="schedList"></div><p class="small muted">Задания ставятся в чате: «каждое утро в 9 присылай план на день», «напомни в пятницу в 18:00 сдать отчёт».</p></div>
+ <div class="row"><button value="close">Закрыть</button></div>
 </form></dialog>
 <dialog id="dlgJoin"><form method="dialog" id="fJoin">
  <h3 style="margin-top:0">Вступить в проект</h3>
@@ -323,7 +337,7 @@ async function openChat(id){
  const k=data.chat.kind;
  $('chatTitle').textContent=k==='lobby'?'💬 Общий чат':k==='project'?'👥 '+data.chat.title:data.chat.title;
  $('aiToggle').classList.toggle('hidden',k==='personal');$('askAI').checked=false;
- $('shareBtn').classList.toggle('hidden',k!=='project');$('leaveBtn').classList.toggle('hidden',k!=='project');
+ $('shareBtn').classList.toggle('hidden',k!=='project');$('projMindBtn').classList.toggle('hidden',k!=='project');$('leaveBtn').classList.toggle('hidden',k!=='project');
  $('renameBtn').classList.toggle('hidden',k!=='personal');$('deleteBtn').classList.toggle('hidden',k!=='personal');
  const pi=$('projInfo');pi.innerHTML='';
  if(S.project)showProjectInfo();
@@ -346,7 +360,7 @@ function upsert(m){
  if(!el){el=document.createElement('div');S.msgs.set(m.id,el);box.append(el)}
  const ai=!m.user_id,mine=S.me&&m.user_id===S.me.id;
  el.className='msg'+(ai?' ai':'')+(mine?' mine':'');
- let body=m.status==='pending'?'<span class="thinking">Улей думает</span>':render(m.content||'');
+ let body=m.status==='pending'?'<span class="thinking">Улей думает</span>'+(m.content?' <span class="small muted">'+esc(m.content)+'</span>':''):render(m.content||'');
  if(m.status==='failed')body='<span class="muted">'+esc(m.content)+'</span>';
  el.innerHTML='<div class="who"><b></b> · '+time(m.created_at)+'</div>'+body;
  el.querySelector('.who b').textContent=ai?'🐝 Улей':m.author;
@@ -394,6 +408,32 @@ $('authForm').onsubmit=async e=>{e.preventDefault();
   else await api('/auth/login',{method:'POST',body:{login:$('aLogin').value,password:$('aPass').value}});
   await refreshMe();connect();if(location.hash.length>1)openChat(location.hash.slice(1))}
  catch(err){$('aErr').textContent=err.message}};
+/* ---------- what Улей remembers ---------- */
+let mindProject=null;
+function mindTab(t){for(const [b,p] of [['tabMem','mindMem'],['tabSkills','mindSkills'],['tabSched','mindSched']]){$(b).className=b===t?'':'ghost';$(p).classList.toggle('hidden',b!==t)}}
+$('tabMem').onclick=()=>mindTab('tabMem');$('tabSkills').onclick=()=>mindTab('tabSkills');$('tabSched').onclick=()=>mindTab('tabSched');
+function rowItem(icon,title,sub,onDel){const r=document.createElement('div');r.className='item';r.style.cursor='default';
+ r.innerHTML='<span></span><span class="t" style="white-space:normal"></span><button type="button" class="ghost small">Удалить</button>';
+ r.children[0].textContent=icon;r.children[1].textContent=title;if(sub){const s=document.createElement('div');s.className='small muted';s.textContent=sub;r.children[1].append(s)}
+ r.children[2].onclick=onDel;return r}
+async function loadMind(){
+ const q=mindProject?'?project='+mindProject:'';const d=await api('/agent'+q);
+ $('memList').replaceChildren(...d.memories.map(m=>rowItem('🧠',m.text,new Date(m.created_at*1000).toLocaleDateString('ru-RU'),async()=>{await api('/memories/'+m.id+q,{method:'DELETE'});loadMind()})));
+ if(!d.memories.length)$('memList').innerHTML='<p class="small muted">Пока ничего. Улей сам запоминает важное из разговоров.</p>';
+ $('skillList').replaceChildren(...d.skills.map(k=>rowItem('🛠',k.name,k.description+(k.uses?' · использован '+k.uses+' раз':''),async()=>{if(confirm('Удалить навык «'+k.name+'»?')){await api('/skills/'+k.id+q,{method:'DELETE'});loadMind()}})));
+ if(!d.skills.length)$('skillList').innerHTML='<p class="small muted">Навыков пока нет.</p>';
+ const sch=d.schedules||[];$('tabSched').classList.toggle('hidden',!!mindProject);
+ $('schedList').replaceChildren(...sch.map(x=>rowItem('⏰',x.prompt,x.when+' · следующий раз '+new Date(x.next_run*1000).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'}),async()=>{await api('/schedules/'+x.id,{method:'DELETE'});loadMind()})));
+ if(!sch.length)$('schedList').innerHTML='<p class="small muted">Заданий по расписанию нет.</p>';
+}
+async function openMind(project){mindProject=project;mindTab('tabMem');
+ $('mindTitle').textContent=project?'Память проекта':'Что Улей помнит';
+ $('mindNote').textContent=project?'Общая для всех участников проекта: факты и навыки, которые Улей использует в чате проекта.':'Это видите только вы. Улей учитывает эти факты во всех ваших личных чатах. Можно удалить любой.';
+ await loadMind();$('dlgMind').showModal()}
+$('mindBtn').onclick=()=>{closeNav();openMind(null)};$('projMindBtn').onclick=()=>openMind(S.project.id);
+$('memAdd').onclick=async()=>{const t=$('memText').value.trim();if(!t)return;const q=mindProject?'?project='+mindProject:'';
+ try{await api('/memories'+q,{method:'POST',body:{text:t}});$('memText').value='';loadMind()}catch(e){alert(e.message)}};
+
 /* ---------- API keys ---------- */
 async function loadKeys(newKey){
  const d=await api('/keys');const box=$('keyList');box.replaceChildren();

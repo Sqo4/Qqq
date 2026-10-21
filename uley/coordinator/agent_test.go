@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -226,5 +227,30 @@ func TestSearchHistoryAndStepLimit(t *testing.T) {
 	}
 	if m := lastMessage(t, vlad, c.ID); m.Content != "Итог: нашёл старое сообщение." {
 		t.Fatalf("final answer after the limit: %+v", m)
+	}
+}
+
+func TestMemoryPanel(t *testing.T) {
+	_, hs := newSocial(t, Config{})
+	anna, eve := signup(t, hs.URL, "anna"), signup(t, hs.URL, "eve")
+	var m Memory
+	anna.do("POST", "/memories", map[string]string{"text": "Люблю краткие ответы"}, &m)
+	var st struct{ Memories []Memory }
+	anna.do("GET", "/agent", nil, &st)
+	if len(st.Memories) != 1 || st.Memories[0].Text != "Люблю краткие ответы" {
+		t.Fatalf("panel: %+v", st)
+	}
+	if code := eve.do("DELETE", "/memories/"+strconv.FormatInt(m.ID, 10), nil, nil); code != 404 {
+		t.Fatalf("someone else deleted Anna's memory: %d", code)
+	}
+	var p Project
+	anna.do("POST", "/projects", map[string]any{"name": "X"}, &p)
+	if code := eve.do("GET", "/agent?project="+p.ID, nil, nil); code != 403 {
+		t.Fatalf("outsider read project memory: %d", code)
+	}
+	anna.do("DELETE", "/memories/"+strconv.FormatInt(m.ID, 10), nil, nil)
+	anna.do("GET", "/agent", nil, &st)
+	if len(st.Memories) != 0 {
+		t.Fatal("memory not deleted")
 	}
 }
