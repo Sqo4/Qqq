@@ -41,5 +41,15 @@ PLIST
 codesign --force --deep --sign - "$APP"
 
 mkdir -p "$OUT"
-ln -s /Applications "$W/Applications"
-hdiutil create -volname "Uley" -srcfolder "$APP" -srcfolder "$W/Applications" -ov -format UDZO "$OUT/Uley-macos-arm64.dmg"
+DMGSRC="$W/dmg"; mkdir -p "$DMGSRC"
+mv "$APP" "$DMGSRC/"
+ln -s /Applications "$DMGSRC/Applications"
+# hdiutil sometimes hangs on CI runners ("Resource busy"): limit each try
+# to 5 minutes and retry.
+for i in 1 2 3 4 5; do
+  if perl -e 'alarm 300; exec @ARGV' hdiutil create -volname "Uley" -srcfolder "$DMGSRC" -fs HFS+ -ov -format UDZO "$OUT/Uley-macos-arm64.dmg"; then
+    exit 0
+  fi
+  echo "hdiutil failed (try $i), retrying"; sleep 10
+done
+exit 1
