@@ -436,7 +436,10 @@ func (m *ChainManager) start(ctx context.Context, members []string, split []int)
 	args := []string{
 		"-m", modelPath,
 		"--rpc", strings.Join(addrs, ","),
-		"-ngl", "999",
+		// Only the transformer blocks go to volunteers. The output layer stays
+		// on the coordinator: otherwise every word would send its scores over
+		// the whole vocabulary (~600 KB for Qwen3) up a volunteer's home line.
+		"-ngl", strconv.Itoa(max(m.cfg.Model.Layers, 1)),
 		"--tensor-split", strings.Join(ts, ","),
 		"-c", strconv.Itoa(m.cfg.Model.ContextSize),
 		"--parallel", strconv.Itoa(m.cfg.Parallel),
