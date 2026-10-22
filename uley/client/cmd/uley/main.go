@@ -29,6 +29,7 @@ import (
 	"github.com/sqo4/uley/client/tray"
 	"github.com/sqo4/uley/client/ui"
 	"github.com/sqo4/uley/client/update"
+	"github.com/sqo4/uley/internal/datadir"
 	"github.com/sqo4/uley/internal/models"
 	"github.com/sqo4/uley/internal/protocol"
 	"github.com/sqo4/uley/internal/signing"
@@ -178,6 +179,9 @@ func main() {
 // modelsDir keeps gigabytes of models in the local cache folder, never in
 // the roaming profile that Windows may sync between computers.
 func modelsDir(configDir string) string {
+	if d := datadir.Get(); d != "" {
+		return filepath.Join(d, "models")
+	}
 	if os.Getenv("ULEY_HOME") == "" {
 		if c, err := os.UserCacheDir(); err == nil {
 			return filepath.Join(c, "Uley", "models")

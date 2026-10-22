@@ -25,6 +25,7 @@ import (
 
 	"github.com/sqo4/uley/client/download"
 	"github.com/sqo4/uley/coordinator"
+	"github.com/sqo4/uley/internal/datadir"
 	"github.com/sqo4/uley/internal/lan"
 	"github.com/sqo4/uley/internal/models"
 	"github.com/sqo4/uley/web"
@@ -57,7 +58,12 @@ func fetchModel(ctx context.Context, chain *coordinator.ChainManager, m models.M
 			return
 		}
 		log.Printf("model download: %v (retrying in a minute)", err)
-		chain.SetMessage("Не удалось скачать модель, пробуем снова: " + err.Error())
+		if datadir.IsDiskFull(err) {
+			log.Printf("На диске не хватает места для модели (%.1f ГБ). Переустановите Улей и выберите папку для моделей на другом диске или запустите сервер с -model-dir D:\\Uley", float64(m.SizeBytes)/(1<<30))
+			chain.SetMessage("На сервере не хватает места на диске для модели")
+		} else {
+			chain.SetMessage("Не удалось скачать модель, пробуем снова: " + err.Error())
+		}
 		select {
 		case <-ctx.Done():
 		case <-time.After(time.Minute):
@@ -162,8 +168,13 @@ func main() {
 		}
 		dir := *modelDir
 		if dir == "" {
-			dir = filepath.Join(filepath.Dir(*dbPath), "models")
+			if d := datadir.Get(); d != "" {
+				dir = filepath.Join(d, "server-models")
+			} else {
+				dir = filepath.Join(filepath.Dir(*dbPath), "models")
+			}
 		}
+		log.Printf("модель будет храниться в %s", dir)
 		chain, err := coordinator.NewChainManager(store, coordinator.ChainConfig{
 			Model: model, HeadBin: head, LogDir: filepath.Join(filepath.Dir(*dbPath), "logs"), Balance: *balance,
 		})

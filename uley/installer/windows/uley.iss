@@ -81,8 +81,88 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM uley-coordinator.exe"; Flags
 ; Settings, node token, logs and downloaded models (they can be several GB).
 Type: filesandordirs; Name: "{userappdata}\Uley"
 Type: filesandordirs; Name: "{localappdata}\Uley"
+; Only our own folders inside the chosen data folder.
+Type: filesandordirs; Name: "{code:DataDir}\models"
+Type: filesandordirs; Name: "{code:DataDir}\chain-cache"
+Type: filesandordirs; Name: "{code:DataDir}\server-models"
+Type: dirifempty; Name: "{code:DataDir}"
+Type: files; Name: "{app}\data-dir.txt"
 
 [Code]
+var
+  DataPage: TInputDirWizardPage;
+
+// The system disk is often full, so suggest the disk with the most room
+// when C: has less than 10 GB free.
+function DefaultDataDir: String;
+var
+  Free, Total, BestFree: Int64;
+  I: Integer;
+begin
+  Result := ExpandConstant('{localappdata}\Uley');
+  if not GetSpaceOnDisk64(AddBackslash(ExtractFileDrive(Result)), Free, Total) then
+    Free := 0;
+  if Free > 10737418240 then
+    Exit;
+  BestFree := Free;
+  for I := Ord('D') to Ord('Z') do
+    if GetSpaceOnDisk64(Chr(I) + ':\', Free, Total) and (Free > BestFree) and (Total > 21474836480) then
+    begin
+      BestFree := Free;
+      Result := Chr(I) + ':\Uley';
+    end;
+end;
+
+procedure InitializeWizard;
+begin
+  DataPage := CreateInputDirPage(wpSelectTasks,
+    'Где хранить модели',
+    'Языковые модели занимают несколько гигабайт.',
+    'Выберите папку на диске, где свободно хотя бы 10 ГБ. Компьютеру-серверу ' +
+    'с большой моделью нужно около 25 ГБ. Улей создаст в ней свою папку Uley.',
+    False, '');
+  DataPage.Add('');
+  DataPage.Values[0] := GetPreviousData('DataDir', DefaultDataDir);
+end;
+
+// DataDir always ends in its own Uley folder, so uninstalling never touches
+// anything else on a disk the person picked.
+function DataDir(Param: String): String;
+begin
+  Result := RemoveBackslashUnlessRoot(DataPage.Values[0]);
+  if CompareText(ExtractFileName(Result), 'Uley') <> 0 then
+    Result := AddBackslash(Result) + 'Uley';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Free, Total: Int64;
+begin
+  Result := True;
+  if (CurPageID = DataPage.ID) and GetSpaceOnDisk64(AddBackslash(ExtractFileDrive(DataDir(''))), Free, Total)
+     and (Free < 5368709120) then
+    Result := MsgBox('На этом диске свободно меньше 5 ГБ, модель может не поместиться. Всё равно оставить эту папку?',
+      mbConfirmation, MB_YESNO) = IDYES;
+end;
+
+procedure RegisterPreviousData(PreviousDataKey: Integer);
+begin
+  SetPreviousData(PreviousDataKey, 'DataDir', DataPage.Values[0]);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Lines: TArrayOfString;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    ForceDirectories(DataDir(''));
+    SetArrayLength(Lines, 1);
+    Lines[0] := DataDir('');
+    SaveStringsToUTF8File(ExpandConstant('{app}\data-dir.txt'), Lines, False);
+  end;
+end;
+
 function LaunchParams(Param: String): String;
 begin
   // After a silent auto-update, start quietly instead of opening the panel.
