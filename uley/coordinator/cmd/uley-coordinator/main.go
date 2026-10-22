@@ -25,6 +25,7 @@ import (
 
 	"github.com/sqo4/uley/client/download"
 	"github.com/sqo4/uley/coordinator"
+	"github.com/sqo4/uley/internal/lan"
 	"github.com/sqo4/uley/internal/models"
 	"github.com/sqo4/uley/web"
 	"golang.org/x/crypto/acme/autocert"
@@ -74,7 +75,11 @@ func printLANAddresses(addr string) {
 	ifaces, _ := net.InterfaceAddrs()
 	for _, a := range ifaces {
 		ipn, ok := a.(*net.IPNet)
-		if !ok || ipn.IP.To4() == nil || !ipn.IP.IsPrivate() {
+		if !ok || ipn.IP.To4() == nil || !lan.IsHome(ipn.IP) {
+			continue
+		}
+		if lan.IsVPN(ipn.IP) {
+			log.Printf("Улей в VPN: друзья в той же VPN открывают http://%s:%s и указывают этот адрес в настройках программы Улей", ipn.IP, port)
 			continue
 		}
 		log.Printf("Улей в локальной сети: откройте на других компьютерах http://%s:%s и укажите этот адрес в настройках программы Улей", ipn.IP, port)

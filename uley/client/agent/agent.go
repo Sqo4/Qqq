@@ -26,6 +26,7 @@ import (
 	"github.com/sqo4/uley/client/engine"
 	"github.com/sqo4/uley/client/gpu"
 	"github.com/sqo4/uley/client/sysmon"
+	"github.com/sqo4/uley/internal/lan"
 	"github.com/sqo4/uley/internal/models"
 	"github.com/sqo4/uley/internal/protocol"
 	"github.com/sqo4/uley/internal/rpctunnel"
@@ -166,8 +167,8 @@ func CheckCoordinatorURL(raw string, allowInsecure bool) error {
 		switch {
 		case host == "localhost" || (ip != nil && ip.IsLoopback()) || allowInsecure:
 			return nil
-		case ip != nil && ip.IsPrivate(), strings.HasSuffix(host, ".local"):
-			// A hive inside a classroom or dorm network (local build).
+		case lan.IsHome(ip), strings.HasSuffix(host, ".local"):
+			// A hive inside a classroom network or a friends' VPN.
 			return nil
 		}
 	}
