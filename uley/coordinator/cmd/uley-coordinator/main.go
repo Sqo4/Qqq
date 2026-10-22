@@ -47,14 +47,24 @@ func fetchModel(ctx context.Context, chain *coordinator.ChainManager, m models.M
 	last, lastLog := time.Time{}, time.Time{}
 	log.Printf("скачиваем модель %s (%.1f ГБ), прогресс будет здесь и на табло", m.ID, float64(m.SizeBytes)/(1<<30))
 	for ctx.Err() == nil {
+		began, from := time.Now(), int64(-1)
 		p, err := download.Fetch(ctx, &http.Client{}, dir, m, func(done, total int64) {
-			if time.Since(last) > 5*time.Second {
-				last = time.Now()
-				chain.SetMessage(fmt.Sprintf("Сервер скачивает модель: %d%%", done*100/total))
+			if from < 0 {
+				from = done // a resumed download already had this much
 			}
+			if time.Since(last) < 5*time.Second {
+				return
+			}
+			last = time.Now()
+			msg := fmt.Sprintf("Сервер скачивает модель: %d%% · %.1f из %.1f ГБ", done*100/total, float64(done)/(1<<30), float64(total)/(1<<30))
+			if secs := time.Since(began).Seconds(); done > from && secs > 0 {
+				speed := float64(done-from) / secs
+				msg += fmt.Sprintf(" · %.1f МБ/с · осталось %s", speed/(1<<20), coordinator.HumanDuration(time.Duration(float64(total-done)/speed)*time.Second))
+			}
+			chain.SetMessage(msg)
 			if time.Since(lastLog) > 30*time.Second {
 				lastLog = time.Now()
-				log.Printf("модель скачана на %d%% (%.1f из %.1f ГБ)", done*100/total, float64(done)/(1<<30), float64(total)/(1<<30))
+				log.Print(msg)
 			}
 		})
 		if err == nil {

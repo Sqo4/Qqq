@@ -258,17 +258,25 @@ function onStats(s){
  const c=s.chain;$('chainBox').classList.toggle('hidden',!c);
  if(c){$('chainMsg').textContent=c.message;$('chainHave').textContent=fmt(c.have_mb/1024)+' ГБ';$('chainNeed').textContent=fmt(c.need_mb/1024)+' ГБ';
   $('chainMembers').textContent=c.members;$('chainSpares').textContent=c.spares;
-  $('chainBar').style.width=Math.min(100,Math.round(c.have_mb/c.need_mb*100))+'%';
+  let bar=Math.min(100,Math.round(c.have_mb/c.need_mb*100));
+  if(c.state==='loading'){const ls=(c.links||[]).filter(l=>l.load_total_mb);
+   const done=ls.reduce((a,l)=>a+l.load_done_mb,0),tot=ls.reduce((a,l)=>a+l.load_total_mb,0);
+   if(tot){bar=Math.round(done/tot*100);const left=Math.max(0,...ls.map(l=>l.load_left_s||0));
+    $('chainMsg').textContent=c.message+' · '+bar+'%'+(left?' · осталось '+humanLeft(left):'')}}
+  $('chainBar').style.width=bar+'%';
   $('chainSpeed').textContent=c.word_ms>0?'≈ '+fmt(1000/c.word_ms)+' слов/с ('+fmt(c.word_ms)+' мс на слово)':'замеряем…';
   renderLinks(c.links||[])}
  S.history.push({t:Date.now(),u:util,used,cap});if(S.history.length>300)S.history.shift();drawSpark();
 }
+function humanLeft(s){return s<60?'меньше минуты':s<3600?'~'+Math.round(s/60)+' мин':'~'+Math.floor(s/3600)+' ч '+Math.round(s%3600/60)+' мин'}
+function loadText(l){if(!l.load_total_mb)return'замеряем…';if(l.load_done_mb>=l.load_total_mb)return'модель получена, запускаем…';
+ return'получает модель: '+fmt(l.load_done_mb/1024)+' из '+fmt(l.load_total_mb/1024)+' ГБ'+(l.load_mbps?' · '+fmt(l.load_mbps)+' МБ/с · осталось '+humanLeft(l.load_left_s):'')}
 function renderLinks(links){
  const tb=$('links');tb.replaceChildren();
  const maxStep=Math.max(1,...links.map(l=>l.step_ms||0));
  links.forEach((l,i)=>{const tr=document.createElement('tr');if(!l.in_chain)tr.className='spare';
   const name=(l.name||('узел '+(i+1)));
-  const step=l.in_chain?(l.step_ms?'<span class="bar2" style="width:'+Math.round(l.step_ms/maxStep*60)+'px"></span>'+fmt(l.step_ms)+' мс':'замеряем…'):'в запасе';
+  const step=l.in_chain?(l.step_ms?'<span class="bar2" style="width:'+Math.round(l.step_ms/maxStep*60)+'px"></span>'+fmt(l.step_ms)+' мс':loadText(l)):'в запасе';
   tr.innerHTML='<td></td><td></td><td class="num"></td><td class="num">'+step+'</td><td class="num"></td>';
   tr.children[0].textContent=(l.in_chain?'🐝 ':'⏸ ')+name;tr.children[1].textContent=l.gpu||'—';
   tr.children[2].textContent=l.in_chain?l.layers:'—';tr.children[4].textContent=l.net_ms?fmt(l.net_ms)+' мс':'—';tb.append(tr)});

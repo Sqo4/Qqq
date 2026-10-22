@@ -112,18 +112,21 @@ type liveChain struct {
 	ready   bool
 	cancel  context.CancelFunc
 	started time.Time
+	sent0   []int64 // bytes already sent to each link before this chain
 }
 
 // ChainManager assembles volunteer GPUs into a chain that runs one big
 // model, watches it and rebuilds it when someone leaves.
 type ChainManager struct {
-	cfg     ChainConfig
-	store   *Store
-	logged  string // last waiting message printed to the server window
-	relay   *rpctunnel.Relay
-	bell    *notifier
-	timeout time.Duration
-	nodeID  string // the chain acts as one virtual node in the task queue
+	cfg    ChainConfig
+	store  *Store
+	logged string // last waiting message printed to the server window
+	// loggedLoad is when loading progress was last printed (under mu).
+	loggedLoad time.Time
+	relay      *rpctunnel.Relay
+	bell       *notifier
+	timeout    time.Duration
+	nodeID     string // the chain acts as one virtual node in the task queue
 
 	mu      sync.Mutex
 	workers map[string]*chainWorker
@@ -246,6 +249,7 @@ func (m *ChainManager) tick(ctx context.Context) {
 			m.breakChain("движок цепочки остановился, пересобираем")
 		default:
 			m.measure(ch)
+			m.logLoading(ch)
 		}
 		return
 	}
@@ -458,6 +462,9 @@ func (m *ChainManager) start(ctx context.Context, members []string, split []int)
 		ts[i] = strconv.Itoa(v)
 	}
 	c := &liveChain{members: members, layers: split, stepMS: make([]float64, len(members)), exited: make(chan struct{}), base: "http://127.0.0.1:" + strconv.Itoa(port), key: randKey(), started: time.Now()}
+	for _, id := range members {
+		c.sent0 = append(c.sent0, m.relay.Sent(id))
+	}
 	m.mu.Lock()
 	modelPath := m.cfg.ModelPath
 	m.mu.Unlock()
@@ -688,7 +695,11 @@ func (m *ChainManager) Stats() protocol.ChainStats {
 		for i, id := range c.members {
 			inChain[id] = i
 			st.WordMS += c.stepMS[i]
-			st.Links = append(st.Links, protocol.ChainLink{ID: id, Layers: c.layers[i], StepMS: c.stepMS[i], NetMS: m.rttLocked(id), InChain: true})
+			l := protocol.ChainLink{ID: id, Layers: c.layers[i], StepMS: c.stepMS[i], NetMS: m.rttLocked(id), InChain: true}
+			if !c.ready {
+				m.loadProgress(c, i, &l)
+			}
+			st.Links = append(st.Links, l)
 		}
 	}
 	ids := make([]string, 0, len(m.workers))
@@ -706,6 +717,39 @@ func (m *ChainManager) Stats() protocol.ChainStats {
 	return st
 }
 
+// logLoading prints the loading progress of each link every half minute.
+func (m *ChainManager) logLoading(c *liveChain) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c.ready || time.Since(m.loggedLoad) < 30*time.Second {
+		return
+	}
+	m.loggedLoad = time.Now()
+	for i, id := range c.members {
+		var l protocol.ChainLink
+		m.loadProgress(c, i, &l)
+		name, _ := m.store.NodeLabel(id)
+		msg := fmt.Sprintf("загрузка в цепочку: %s получил %d из %d МБ", name, l.LoadDoneMB, l.LoadTotalMB)
+		if l.LoadMBps > 0 {
+			msg += fmt.Sprintf(" · %.1f МБ/с · осталось %s", l.LoadMBps, HumanDuration(time.Duration(l.LoadLeftS)*time.Second))
+		}
+		log.Print(msg)
+	}
+}
+
+// loadProgress fills in how far link i got with receiving its layers. A
+// link that kept the weights from last time gets them from its own disk and
+// simply finishes early.
+func (m *ChainManager) loadProgress(c *liveChain, i int, l *protocol.ChainLink) {
+	total := m.cfg.Model.SizeBytes * int64(c.layers[i]) / int64(max(m.cfg.Model.Layers, 1))
+	done := min(m.relay.Sent(c.members[i])-c.sent0[i], total)
+	l.LoadDoneMB, l.LoadTotalMB = int(done>>20), int(total>>20)
+	if secs := time.Since(c.started).Seconds(); secs > 3 && done > 0 {
+		l.LoadMBps = float64(done) / (1 << 20) / secs
+		l.LoadLeftS = int(float64(total-done) / (1 << 20) / l.LoadMBps)
+	}
+}
+
 func (m *ChainManager) rttLocked(id string) float64 {
 	if w, ok := m.workers[id]; ok {
 		return w.rttMS
@@ -714,3 +758,15 @@ func (m *ChainManager) rttLocked(id string) float64 {
 }
 
 var errNotChain = errors.New("this hive does not run a chain model")
+
+// HumanDuration says how long something will take in plain Russian.
+func HumanDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "меньше минуты"
+	case d < time.Hour:
+		return fmt.Sprintf("~%d мин", int(d.Minutes()+0.5))
+	default:
+		return fmt.Sprintf("~%d ч %d мин", int(d.Hours()), int(d.Minutes())%60)
+	}
+}

@@ -76,6 +76,12 @@ type ChainLink struct {
 	StepMS  float64 `json:"step_ms"` // its share of a step, network included
 	NetMS   float64 `json:"net_ms"`
 	InChain bool    `json:"in_chain"`
+	// While the chain loads: how much of its part of the model the link has
+	// received, the average speed and the time left.
+	LoadDoneMB  int     `json:"load_done_mb,omitempty"`
+	LoadTotalMB int     `json:"load_total_mb,omitempty"`
+	LoadMBps    float64 `json:"load_mbps,omitempty"`
+	LoadLeftS   int     `json:"load_left_s,omitempty"`
 }
 
 // GPU is everything a node tells the coordinator about its hardware.

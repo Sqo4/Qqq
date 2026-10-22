@@ -50,6 +50,7 @@ type meter struct {
 	mu     sync.Mutex
 	wait   time.Duration
 	rounds int64
+	sent   int64 // bytes from the head to the worker, never reset
 }
 
 // MeterReading is the head's waiting time on one worker.
@@ -177,6 +178,20 @@ func (r *Relay) Meter(nodeID string) (MeterReading, bool) {
 	return MeterReading{Wait: w.meter.wait, Rounds: w.meter.rounds}, true
 }
 
+// Sent returns how many bytes the head has sent to the worker so far, the
+// model's weights included: the board shows loading progress from it.
+func (r *Relay) Sent(nodeID string) int64 {
+	r.mu.Lock()
+	w, ok := r.workers[nodeID]
+	r.mu.Unlock()
+	if !ok {
+		return 0
+	}
+	w.meter.mu.Lock()
+	defer w.meter.mu.Unlock()
+	return w.meter.sent
+}
+
 // ResetMeter starts a new measurement window (e.g. once a chain is loaded,
 // so the weight upload is not counted as slowness).
 func (r *Relay) ResetMeter(nodeID string) {
@@ -284,12 +299,12 @@ func meteredSplice(head, worker net.Conn, m *meter) {
 	pending := false
 	var start time.Time
 	done := make(chan struct{}, 2)
-	cp := func(dst, src net.Conn, onData func()) {
+	cp := func(dst, src net.Conn, onData func(n int)) {
 		buf := make([]byte, 64<<10)
 		for {
 			n, err := src.Read(buf)
 			if n > 0 {
-				onData()
+				onData(n)
 				if _, werr := dst.Write(buf[:n]); werr != nil {
 					break
 				}
@@ -303,14 +318,17 @@ func meteredSplice(head, worker net.Conn, m *meter) {
 		}
 		done <- struct{}{}
 	}
-	go cp(worker, head, func() { // a request goes out
+	go cp(worker, head, func(n int) { // a request goes out
 		mu.Lock()
 		if !pending {
 			pending, start = true, time.Now()
 		}
 		mu.Unlock()
+		m.mu.Lock()
+		m.sent += int64(n)
+		m.mu.Unlock()
 	})
-	go cp(head, worker, func() { // the answer starts coming back
+	go cp(head, worker, func(int) { // the answer starts coming back
 		mu.Lock()
 		if pending {
 			pending = false
