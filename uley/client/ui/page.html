@@ -67,6 +67,7 @@ details summary{cursor:pointer;color:var(--muted)}.hidden{display:none}.err{colo
   <p class="muted" id="gpus"></p>
   <div id="upd" class="hidden"><button id="updbtn"></button></div>
   <p><a id="hiveLink" href="#" target="_blank" rel="noopener">Открыть Улей: чаты, проекты и мощности в прямом эфире →</a></p>
+  <p class="muted hidden" id="nohive"></p>
  </div>
 
  <div class="card">
@@ -114,6 +115,9 @@ function render(s){S=s;$('ver').textContent='версия '+s.version;
  if(!editing){for(const el of document.querySelectorAll('[data-k]')){const v=s.settings[el.dataset.k];
   if(el.type==='checkbox')el.checked=!!v;else if(el.tagName==='SELECT'){fillModels(el,s);el.value=v||''}else if(document.activeElement!==el)el.value=v}}
  $('hiveLink').href=s.settings.coordinator.replace(/\/+$/,'')+'/';
+ const local=/\/\/(127\.|localhost|\[::1\])/.test(s.settings.coordinator);
+ $('nohive').classList.toggle('hidden',!!st.connected);
+ $('nohive').textContent=local?'Сервер Улья на этом компьютере не запущен. Если сервер у друга, впишите его адрес (например, http://26.1.2.3:8080) внизу в «Дополнительно» → «Адрес координатора». Если сервер — этот компьютер, запустите ярлык «Улей — сервер».':'Сервер '+s.settings.coordinator+' не отвечает. Проверьте, что на том компьютере запущен «Улей — сервер» и что VPN подключена.';
  $('gpuv').textContent=s.settings.max_gpu_percent+'%';$('vramv').textContent=s.settings.max_vram_percent+'%'}
 function fillModels(sel,s){if(sel.options.length)return;const a=new Option('Автоматически (самая большая, что помещается)','');sel.add(a);
  for(const m of s.models)sel.add(new Option(m.name+' — нужно '+(m.min_vram_mb/1024).toFixed(1)+' ГБ'+(m.fits?'':' (не поместится)'),m.id))}
