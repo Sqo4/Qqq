@@ -23,6 +23,10 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 DefaultGroupName=Улей
 PrivilegesRequired=lowest
+; Setup runs without admin rights, so the guard gains nothing, while it
+; breaks shortcuts for people whose Desktop was moved through a junction
+; (error 0x800701C0, "untrusted mount point").
+RedirectionGuard=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\..\dist
