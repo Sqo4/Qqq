@@ -159,7 +159,7 @@ API закрыт без ключа (`-require-api-key`, по умолчанию 
 
 ## Релиз установщиков
 
-1. Тег `uley-vX.Y.Z` (например `git tag uley-v0.1.0 && git push origin uley-v0.1.0`) запускает `.github/workflows/uley-release.yml`. Он собирает установщики и публикует GitHub Release. Ссылки вида `releases/latest/download/Uley-Setup-windows-x64.exe` всегда ведут на последнюю версию.
+1. Тег `uley-vX.Y.Z` (например `git tag uley-v0.1.0 && git push origin uley-v0.1.0`) запускает `.github/workflows/uley-release.yml`. Он собирает установщики и публикует GitHub Release. Ссылки вида `releases/latest/download/Uley-Setup-windows-x64.exe` ведут на последнюю обычную версию; тестовые (`-rc`) они пропускают, поэтому страница скачивания сама находит самый свежий релиз через GitHub API.
 2. Перед первым настоящим релизом задайте в Settings → Secrets and variables → Actions:
    - переменную `ULEY_COORDINATOR_URL`: адрес координатора (`https://...`). Без неё клиент будет искать сервер на `127.0.0.1`;
    - переменную `ULEY_UPDATE_PUBLIC_KEY` и секрет `ULEY_UPDATE_PRIVATE_KEY`: выполните `go run ./tools/uley-sign keygen`;

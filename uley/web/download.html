@@ -19,20 +19,21 @@ a{color:var(--honey)}
 <body>
 <main>
 <h1>🐝 Подключиться к <span>Улью</span></h1>
-<p class="lead">Улей — распределённая нейросеть, которая работает на видеокартах добровольцев. Пока вы не играете, ваша видеокарта может помогать отвечать на запросы к открытым языковым моделям.</p>
+<p class="lead">Улей — распределённая нейросеть, которая работает на видеокартах добровольцев. Видеокарты участников вместе держат одну большую открытую языковую модель, а пользоваться ею можно в чатах, проектах и через Telegram.</p>
 
 <div class="dl">
- <a id="win" href="https://github.com/Sqo4/Qqq/releases/latest/download/Uley-Setup-windows-x64.exe"><b>Windows</b><small>Windows 10/11, 64 бит · NVIDIA, AMD, Intel</small></a>
- <a id="linux" href="https://github.com/Sqo4/Qqq/releases/latest/download/uley_linux_amd64.deb"><b>Linux (.deb)</b><small>Ubuntu, Debian, Mint</small></a>
- <a id="mac" href="https://github.com/Sqo4/Qqq/releases/latest/download/Uley-macos-arm64.dmg"><b>macOS</b><small>Apple Silicon (M1 и новее)</small></a>
+ <a id="win" href="https://github.com/Sqo4/Qqq/releases" data-file="Uley-Setup-windows-x64.exe"><b>Windows</b><small>Windows 10/11, 64 бит · NVIDIA, AMD, Intel</small></a>
+ <a id="linux" href="https://github.com/Sqo4/Qqq/releases" data-file="uley_linux_amd64.deb"><b>Linux (.deb)</b><small>Ubuntu, Debian, Mint</small></a>
+ <a id="mac" href="https://github.com/Sqo4/Qqq/releases" data-file="Uley-macos-arm64.dmg"><b>macOS</b><small>Apple Silicon (M1 и новее)</small></a>
 </div>
-<p style="margin-top:-20px"><small>Другие дистрибутивы Linux: <a href="https://github.com/Sqo4/Qqq/releases/latest/download/uley-linux-amd64.tar.gz">архив .tar.gz</a></small></p>
+<p style="margin-top:-20px"><small id="ver"></small><br><small>Другие дистрибутивы Linux: <a href="https://github.com/Sqo4/Qqq/releases" data-file="uley-linux-amd64.tar.gz">архив .tar.gz</a></small></p>
 
 <h2>Что делает программа</h2>
 <ul>
- <li>Скачивает одну открытую языковую модель (от 0,6 до 5 ГБ) из проверенного списка и проверяет её контрольную сумму.</li>
- <li>Получает от сервера Улья текстовые запросы, считает ответы на видеокарте и отправляет их обратно.</li>
- <li>Не запускает никакой чужой код и ничего не майнит. На сервер уходят только модель видеокарты, объём её памяти и статус задач.</li>
+ <li>Держит на видеокарте свою часть общей модели из проверенного списка. Остальные части — у других участников.</li>
+ <li>Сама подключается к серверу Улья и считает только для него. Снаружи к компьютеру никто не подключается.</li>
+ <li>Не запускает никакой чужой код и ничего не майнит. На сервер уходят только модель видеокарты, объём её памяти и статус работы.</li>
+ <li>При установке можно выбрать диск, где хранить модели.</li>
 </ul>
 
 <h2>Вы всё контролируете</h2>
@@ -48,6 +49,13 @@ a{color:var(--honey)}
 <script>
 const ua=navigator.userAgent;const me=/Windows/.test(ua)?'win':/Mac/.test(ua)?'mac':/Linux/.test(ua)?'linux':'';
 if(me)document.getElementById(me).classList.add('me');
+// The newest Улей release, test versions included (GitHub's "latest" link
+// skips them). Without the API the links lead to the list of releases.
+fetch('https://api.github.com/repos/Sqo4/Qqq/releases?per_page=20').then(r=>r.json()).then(list=>{
+ const r=list.find(r=>!r.draft&&r.tag_name.startsWith('uley-v'));if(!r)return;
+ for(const a of document.querySelectorAll('a[data-file]'))a.href='https://github.com/Sqo4/Qqq/releases/download/'+r.tag_name+'/'+a.dataset.file;
+ document.getElementById('ver').textContent='Версия '+r.tag_name.slice(6)+(r.prerelease?' (тестовая)':'');
+}).catch(()=>{});
 </script>
 </body>
 </html>
