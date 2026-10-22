@@ -45,16 +45,21 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Ярлык на рабочем столе"; Flags: unchecked
+Name: "hostserver"; Description: "Этот компьютер будет сервером Улья для своей сети (ярлык «Улей — сервер»)"; Flags: unchecked
 Name: "autostart"; Description: "Запускать Улей вместе с Windows (можно изменить потом в настройках)"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\uley.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\uley-coordinator.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\engine\*"; DestDir: "{app}\engine"; Flags: ignoreversion recursesubdirs
 Source: "{#SourceDir}\NOTICE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\Улей"; Filename: "{app}\uley.exe"
 Name: "{userdesktop}\Улей"; Filename: "{app}\uley.exe"; Tasks: desktopicon
+; Hosting a hive for a local network (classroom, dorm, a few friends).
+Name: "{userprograms}\Улей — сервер для своей сети"; Filename: "{app}\uley-coordinator.exe"; Parameters: "-addr 0.0.0.0:8080 -model qwen3-4b-chain -db ""{localappdata}\Uley\server\uley.db"""; Tasks: hostserver
+Name: "{userdesktop}\Улей — сервер"; Filename: "{app}\uley-coordinator.exe"; Parameters: "-addr 0.0.0.0:8080 -model qwen3-4b-chain -db ""{localappdata}\Uley\server\uley.db"""; Tasks: hostserver
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Uley"; ValueData: """{app}\uley.exe"" --background"; Tasks: autostart; Flags: uninsdeletevalue
@@ -66,6 +71,7 @@ Filename: "{app}\uley.exe"; Parameters: "{code:LaunchParams}"; Description: "З�
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM uley.exe"; Flags: runhidden; RunOnceId: "KillUley"
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM uley-coordinator.exe"; Flags: runhidden; RunOnceId: "KillUleyServer"
 
 [UninstallDelete]
 ; Settings, node token, logs and downloaded models (they can be several GB).

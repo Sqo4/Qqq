@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -63,6 +64,23 @@ func fetchModel(ctx context.Context, chain *coordinator.ChainManager, m models.M
 	}
 }
 
+// printLANAddresses tells, in plain words, which address the other
+// computers of a local network should use.
+func printLANAddresses(addr string) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || (host != "0.0.0.0" && host != "" && host != "::") {
+		return
+	}
+	ifaces, _ := net.InterfaceAddrs()
+	for _, a := range ifaces {
+		ipn, ok := a.(*net.IPNet)
+		if !ok || ipn.IP.To4() == nil || !ipn.IP.IsPrivate() {
+			continue
+		}
+		log.Printf("Улей в локальной сети: откройте на других компьютерах http://%s:%s и укажите этот адрес в настройках программы Улей", ipn.IP, port)
+	}
+}
+
 func findLlamaServer() string {
 	name := "llama-server"
 	if runtime.GOOS == "windows" {
@@ -96,6 +114,9 @@ func main() {
 	headBin := flag.String("llama-server", env("ULEY_LLAMA_SERVER", ""), "llama-server binary that drives the chain (default: engine/ next to this program, then PATH)")
 	flag.Parse()
 
+	if err := os.MkdirAll(filepath.Dir(*dbPath), 0o700); err != nil {
+		log.Fatal(err)
+	}
 	store, err := coordinator.OpenStore(*dbPath)
 	if err != nil {
 		log.Fatalf("open db: %v", err)
@@ -176,6 +197,7 @@ func main() {
 	} else {
 		hs.Addr = *addr
 		log.Printf("listening on http://%s (plain HTTP: put it behind HTTPS before going public)", *addr)
+		printLANAddresses(*addr)
 		err = hs.ListenAndServe()
 	}
 	if err != nil && err != http.ErrServerClosed {

@@ -79,6 +79,38 @@ var whitelist = []Model{
 		ContextSize: 4096,
 		License:     "Apache-2.0",
 	},
+	// Smaller chain models: the first steps for a few computers (e.g. a
+	// group of three). Same files as the single-GPU entries above.
+	{
+		ID:          "qwen3-4b-chain",
+		Name:        "Qwen3 4B (Q4_K_M), общая модель для небольшой группы",
+		File:        "Qwen3-4B-Q4_K_M.gguf",
+		URL:         "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+		SHA256:      "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+		SizeBytes:   2497280256,
+		MinVRAMMB:   6144, // weights 2.5 GB + q8_0 KV cache for 2×16k tokens + buffers
+		ContextSize: 32768,
+		License:     "Apache-2.0",
+		Chain:       true,
+		Layers:      36,
+		Slots:       2,
+		KVCacheType: "q8_0",
+	},
+	{
+		ID:          "qwen3-8b-chain",
+		Name:        "Qwen3 8B (Q4_K_M), общая модель для небольшой группы",
+		File:        "Qwen3-8B-Q4_K_M.gguf",
+		URL:         "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
+		SHA256:      "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+		SizeBytes:   5027783488,
+		MinVRAMMB:   8704, // weights 5 GB + q8_0 KV cache for 2×16k tokens + buffers
+		ContextSize: 32768,
+		License:     "Apache-2.0",
+		Chain:       true,
+		Layers:      36,
+		Slots:       2,
+		KVCacheType: "q8_0",
+	},
 	{
 		ID:        "qwen3-32b",
 		Name:      "Qwen3 32B (Q4_K_M), общая модель улья",

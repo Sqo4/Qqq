@@ -63,11 +63,13 @@ jobs:
         shell: bash
         run: |
           go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$VERSION -X main.defaultCoordinator=$COORDINATOR_URL -X main.updatePublicKey=$UPDATE_PUBLIC_KEY" -o dist/windows/uley.exe ./client/cmd/uley
+          # The hive server too, so any Windows PC can host a hive for its own network.
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o dist/windows/uley-coordinator.exe ./coordinator/cmd/uley-coordinator
           cp installer/NOTICE.txt dist/windows/
       - name: Sign uley.exe
         if: env.HAS_CERT == 'true'
         shell: pwsh
-        run: ./installer/windows/sign.ps1 dist/windows/uley.exe
+        run: ./installer/windows/sign.ps1 dist/windows/uley.exe dist/windows/uley-coordinator.exe
       - name: Install Inno Setup
         shell: pwsh
         run: |
@@ -199,4 +201,6 @@ jobs:
           name: Улей ${{ env.VERSION }}
           body_path: notes.md
           files: out/*
-          make_latest: true
+          # Test builds (uley-v0.1.0-rc1) are pre-releases and never "latest".
+          prerelease: ${{ contains(env.VERSION, '-') }}
+          make_latest: ${{ !contains(env.VERSION, '-') }}

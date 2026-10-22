@@ -395,6 +395,14 @@ func (m *ChainManager) SetMessage(msg string) {
 	m.mu.Unlock()
 }
 
+func rpcDevices(n int) string {
+	names := make([]string, n)
+	for i := range names {
+		names[i] = "RPC" + strconv.Itoa(i)
+	}
+	return strings.Join(names, ",")
+}
+
 func randKey() string {
 	b := make([]byte, 16)
 	rand.Read(b)
@@ -436,6 +444,9 @@ func (m *ChainManager) start(ctx context.Context, members []string, split []int)
 	args := []string{
 		"-m", modelPath,
 		"--rpc", strings.Join(addrs, ","),
+		// Use only the volunteers' GPUs (RPC0, RPC1, ...), never a GPU of the
+		// coordinator's own computer: --tensor-split lists exactly the links.
+		"--device", rpcDevices(len(addrs)),
 		// Only the transformer blocks go to volunteers. The output layer stays
 		// on the coordinator: otherwise every word would send its scores over
 		// the whole vocabulary (~600 KB for Qwen3) up a volunteer's home line.
