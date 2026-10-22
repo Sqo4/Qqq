@@ -85,6 +85,10 @@ type GPU struct {
 	Vendor  string `json:"vendor"` // nvidia, amd, intel, apple, other
 	VRAMMB  int    `json:"vram_mb"`
 	Backend string `json:"backend,omitempty"` // vulkan, cuda, metal
+	// FreeMB is how much of the card was free when it was last looked at;
+	// other programs (games, Ollama, LM Studio) may hold the rest. It stays
+	// on the computer and is never sent.
+	FreeMB int `json:"-"`
 }
 
 type RegisterRequest struct {

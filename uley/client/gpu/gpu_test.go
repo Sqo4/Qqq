@@ -31,3 +31,22 @@ func TestFake(t *testing.T) {
 		t.Fatalf("got %+v", g)
 	}
 }
+
+func TestBudgetLeavesRoomForOtherPrograms(t *testing.T) {
+	gpus := ParseDeviceList("  Vulkan0: NVIDIA GeForce RTX 3060 (12288 MiB, 4096 MiB free)\n")
+	if gpus[0].FreeMB != 4096 {
+		t.Fatalf("free = %d", gpus[0].FreeMB)
+	}
+	// Ollama holds 8 GB: 70% of the card would be 8601, only 90% of free fits.
+	if b := Budget(gpus, 70); b != 3686 {
+		t.Fatalf("budget = %d, want 3686", b)
+	}
+	gpus[0].FreeMB = 12000
+	if b := Budget(gpus, 70); b != 12288*70/100 {
+		t.Fatalf("idle card budget = %d", b)
+	}
+	gpus[0].FreeMB = 0 // unknown
+	if b := Budget(gpus, 50); b != 6144 {
+		t.Fatalf("unknown free budget = %d", b)
+	}
+}

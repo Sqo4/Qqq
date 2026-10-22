@@ -207,7 +207,7 @@ func (a *Agent) refreshGPUs() {
 func (a *Agent) budget(s config.Settings) int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return gpu.Usable(a.gpus) * s.MaxVRAMPercent / 100
+	return gpu.Budget(a.gpus, s.MaxVRAMPercent)
 }
 
 // sleep waits for d, a kick or ctx.
@@ -584,7 +584,9 @@ func (a *Agent) heartbeatLoop(ctx context.Context) {
 		case <-time.After(wait):
 		}
 		wait = a.HeartbeatEvery
-		if time.Since(lastGPU) > time.Hour {
+		// Look again every few minutes how much video memory is free, but
+		// only while our own engine holds none of it.
+		if st := a.Status(); time.Since(lastGPU) > 5*time.Minute && !st.InChain && st.Model == "" {
 			a.refreshGPUs()
 			lastGPU = time.Now()
 		}

@@ -63,7 +63,7 @@ func fromEngine(path string) []protocol.GPU {
 }
 
 // Lines look like "  Vulkan0: NVIDIA GeForce RTX 3060 (12288 MiB, 11593 MiB free)".
-var deviceLine = regexp.MustCompile(`(?m)^\s*(([A-Za-z]+)\d+):\s*(.+?)\s*\((\d+) MiB`)
+var deviceLine = regexp.MustCompile(`(?m)^\s*(([A-Za-z]+)\d+):\s*(.+?)\s*\((\d+) MiB(?:,\s*(\d+) MiB free)?`)
 
 func ParseDeviceList(out string) []protocol.GPU {
 	var gpus []protocol.GPU
@@ -73,7 +73,8 @@ func ParseDeviceList(out string) []protocol.GPU {
 		if backend == "mtl" {
 			backend = "metal"
 		}
-		gpus = append(gpus, protocol.GPU{Device: m[1], Name: m[3], Vendor: VendorOf(m[3]), VRAMMB: mb, Backend: backend})
+		free, _ := strconv.Atoi(m[5])
+		gpus = append(gpus, protocol.GPU{Device: m[1], Name: m[3], Vendor: VendorOf(m[3]), VRAMMB: mb, FreeMB: free, Backend: backend})
 	}
 	return gpus
 }
@@ -96,20 +97,41 @@ func VendorOf(name string) string {
 
 // fromNvidiaSMI works everywhere the NVIDIA driver is installed.
 func fromNvidiaSMI() []protocol.GPU {
-	out, err := run("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
+	out, err := run("nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits")
 	if err != nil {
 		return nil
 	}
 	var gpus []protocol.GPU
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		name, mem, ok := strings.Cut(line, ",")
-		if !ok {
+		f := strings.Split(line, ",")
+		if len(f) < 2 {
 			continue
 		}
-		mb, _ := strconv.Atoi(strings.TrimSpace(mem))
-		gpus = append(gpus, protocol.GPU{Name: strings.TrimSpace(name), Vendor: "nvidia", VRAMMB: mb})
+		mb, _ := strconv.Atoi(strings.TrimSpace(f[1]))
+		g := protocol.GPU{Name: strings.TrimSpace(f[0]), Vendor: "nvidia", VRAMMB: mb}
+		if len(f) > 2 {
+			g.FreeMB, _ = strconv.Atoi(strings.TrimSpace(f[2]))
+		}
+		gpus = append(gpus, g)
 	}
 	return gpus
+}
+
+// Budget is how much video memory Улей may take: percent of the biggest
+// card, but never more than what is free on it right now (minus a little
+// headroom), so a model another program already loaded keeps its place.
+func Budget(gpus []protocol.GPU, percent int) int {
+	var best protocol.GPU
+	for _, g := range gpus {
+		if g.VRAMMB > best.VRAMMB {
+			best = g
+		}
+	}
+	b := best.VRAMMB * percent / 100
+	if best.FreeMB > 0 && best.FreeMB < best.VRAMMB {
+		b = min(b, best.FreeMB*90/100)
+	}
+	return b
 }
 
 // Usable returns the biggest VRAM among cards that can run models.
