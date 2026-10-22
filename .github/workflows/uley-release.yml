@@ -14,7 +14,7 @@ on:
   push:
     tags: ["uley-v*"]
     branches: ["claude/uley"]
-    paths: ["uley/installer/**", "uley/client/**", ".github/workflows/uley-release.yml"]
+    paths: ["uley/**", ".github/workflows/uley-release.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,12 +30,24 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       engine: ${{ steps.v.outputs.engine }}
+      publish: ${{ steps.v.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
       - id: v
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/uley-v* ]]; then v="${GITHUB_REF#refs/tags/uley-v}"; else v="0.0.0-dev.${GITHUB_RUN_NUMBER}"; fi
+          publish=false
+          if [[ "$GITHUB_REF" == refs/tags/uley-v* ]]; then
+            v="${GITHUB_REF#refs/tags/uley-v}"; publish=true
+          elif [[ "$COMMIT_MSG" == *"[prerelease]"* ]]; then
+            # A test build published from the development branch.
+            v="$(cat uley/VERSION)-rc.${GITHUB_RUN_NUMBER}"; publish=true
+          else
+            v="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "engine=$(cat uley/installer/llama-cpp-version.txt)" >> "$GITHUB_OUTPUT"
 
   windows:
@@ -156,7 +168,7 @@ jobs:
             uley/engine.txt
 
   release:
-    if: startsWith(github.ref, 'refs/tags/uley-v')
+    if: needs.version.outputs.publish == 'true'
     needs: [version, windows, linux, macos]
     runs-on: ubuntu-latest
     env:
@@ -177,7 +189,7 @@ jobs:
           cp artifacts/windows/dist/Uley-Setup-windows-x64.exe out/
           cp artifacts/linux/dist/out/* out/
           cp artifacts/macos/dist/out/Uley-macos-arm64.dmg out/
-          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/uley-v${VERSION}"
           if [ -n "$ULEY_UPDATE_PRIVATE_KEY" ]; then
             cd uley
             go run ./tools/uley-sign sign -version "$VERSION" -os windows -arch amd64 -url "$base/Uley-Setup-windows-x64.exe" -file ../out/Uley-Setup-windows-x64.exe > ../out/update-windows-amd64.json
@@ -199,6 +211,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: Улей ${{ env.VERSION }}
+          tag_name: uley-v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           body_path: notes.md
           files: out/*
           # Test builds (uley-v0.1.0-rc1) are pre-releases and never "latest".
