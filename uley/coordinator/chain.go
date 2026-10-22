@@ -119,6 +119,7 @@ type liveChain struct {
 type ChainManager struct {
 	cfg     ChainConfig
 	store   *Store
+	logged  string // last waiting message printed to the server window
 	relay   *rpctunnel.Relay
 	bell    *notifier
 	timeout time.Duration
@@ -159,7 +160,6 @@ func (m *ChainManager) Touch(nodeID string, budgetMB int, rttMS float64) (bool, 
 		return false, err
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	w, ok := m.workers[nodeID]
 	if !ok {
 		w = &chainWorker{id: nodeID}
@@ -169,16 +169,29 @@ func (m *ChainManager) Touch(nodeID string, budgetMB int, rttMS float64) (bool, 
 	if rttMS > 0 {
 		w.rttMS = rttMS
 	}
-	return m.chain != nil && contains(m.chain.members, nodeID), nil
+	inChain := m.chain != nil && contains(m.chain.members, nodeID)
+	count := len(m.workers)
+	m.mu.Unlock()
+	if !ok {
+		name, gpu := m.store.NodeLabel(nodeID)
+		log.Printf("подключился участник %s (%s): даёт %.1f ГБ видеопамяти, пинг %.0f мс; всего участников: %d",
+			name, gpu, float64(budgetMB)/1024, rttMS, count)
+	}
+	return inChain, nil
 }
 
 // Leave is called when a worker pauses (its owner started a game).
 func (m *ChainManager) Leave(nodeID string) {
 	m.mu.Lock()
+	_, known := m.workers[nodeID]
 	delete(m.workers, nodeID)
 	broken := m.chain != nil && contains(m.chain.members, nodeID)
 	m.mu.Unlock()
 	m.relay.Detach(nodeID)
+	if known {
+		name, _ := m.store.NodeLabel(nodeID)
+		log.Printf("участник %s ушёл на паузу", name)
+	}
 	if broken {
 		m.breakChain("участник поставил паузу, пересобираем цепочку")
 	}
@@ -244,6 +257,13 @@ func (m *ChainManager) tick(ctx context.Context) {
 	}
 	members, split, ok := m.pick()
 	if !ok {
+		m.mu.Lock()
+		msg, fresh := m.message, m.message != m.logged
+		m.logged = msg
+		m.mu.Unlock()
+		if fresh {
+			log.Print(msg)
+		}
 		return
 	}
 	m.start(ctx, members, split)

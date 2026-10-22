@@ -44,16 +44,21 @@ func env(name, def string) string {
 // fetchModel downloads the chain model (resuming, SHA-256 checked) and
 // hands it to the chain manager.
 func fetchModel(ctx context.Context, chain *coordinator.ChainManager, m models.Model, dir string) {
-	last := time.Time{}
+	last, lastLog := time.Time{}, time.Time{}
+	log.Printf("скачиваем модель %s (%.1f ГБ), прогресс будет здесь и на табло", m.ID, float64(m.SizeBytes)/(1<<30))
 	for ctx.Err() == nil {
 		p, err := download.Fetch(ctx, &http.Client{}, dir, m, func(done, total int64) {
 			if time.Since(last) > 5*time.Second {
 				last = time.Now()
 				chain.SetMessage(fmt.Sprintf("Сервер скачивает модель: %d%%", done*100/total))
 			}
+			if time.Since(lastLog) > 30*time.Second {
+				lastLog = time.Now()
+				log.Printf("модель скачана на %d%% (%.1f из %.1f ГБ)", done*100/total, float64(done)/(1<<30), float64(total)/(1<<30))
+			}
 		})
 		if err == nil {
-			log.Printf("model %s ready at %s", m.ID, p)
+			log.Printf("модель %s готова: %s. Ждём, когда подключатся видеокарты участников", m.ID, p)
 			chain.SetModelPath(p)
 			return
 		}
