@@ -293,7 +293,11 @@ func (b *telegramBot) deliver(ctx context.Context, changed []Message) {
 		delete(b.forward, m.ID)
 		b.mu.Unlock()
 		if ok {
-			go b.send(ctx, tg, m.Content)
+			text := m.Content
+			if m.Status == MsgDone {
+				text += b.s.aiFooter() // the answer may be forwarded anywhere
+			}
+			go b.send(ctx, tg, text)
 		}
 	}
 }

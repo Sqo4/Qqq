@@ -48,6 +48,8 @@ table.links tr.spare td{color:var(--faint)}.bar2{display:inline-block;height:8px
 .msg.mine{align-self:flex-end;background:var(--me);border-color:var(--honey-dim)}
 .msg.ai{border-left:3px solid var(--honey)}
 .msg .who{font-size:12px;color:var(--muted);margin-bottom:2px}.msg .who b{color:var(--text)}
+.aitag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;color:#1b1400;background:var(--honey);border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
+.msgtools{margin-top:6px;display:flex;gap:6px}.msgtools button{font-size:12px;padding:3px 8px}
 .msg pre{background:#0f0c08;border:1px solid var(--line);border-radius:8px;padding:8px;overflow-x:auto;white-space:pre}
 .msg code{font-family:ui-monospace,Consolas,monospace;font-size:13px}
 .thinking{color:var(--muted);font-style:italic}.thinking:after{content:'…';animation:dots 1.2s steps(3) infinite;display:inline-block;width:1em;overflow:hidden;vertical-align:bottom}
@@ -154,6 +156,7 @@ dialog::backdrop{background:#000a}dialog label{display:block;margin:10px 0 4px;f
    <span id="projInfo" class="small muted"></span>
    <button class="ghost small hidden" id="projMindBtn">🧠 Память проекта</button>
    <button class="ghost small hidden" id="shareBtn">Поделиться в общем чате</button>
+   <button class="ghost small" id="exportBtn" title="Скачать переписку; ответы ИИ будут помечены">⬇ Скачать</button>
    <button class="ghost small hidden" id="renameBtn">Переименовать</button>
    <button class="ghost small hidden" id="deleteBtn">Удалить</button>
    <button class="ghost small hidden" id="leaveBtn">Выйти из проекта</button>
@@ -324,7 +327,7 @@ function renderNav(){
  document.querySelector('[data-chat=lobby]').onclick=()=>openChat('lobby');markNav();
 }
 async function refreshMe(){
- try{const me=await api('/me');S.me=me.user;S.chats=me.chats;S.projects=me.projects}catch(e){S.me=null}
+ try{const me=await api('/me');S.me=me.user;S.chats=me.chats;S.projects=me.projects;S.model=me.model}catch(e){S.me=null}
  $('navUser').classList.toggle('hidden',!S.me);$('auth').classList.toggle('hidden',!!S.me);
  $('who').classList.toggle('hidden',!S.me);$('logout').classList.toggle('hidden',!S.me);$('keysBtn').classList.toggle('hidden',!S.me);
  if(S.me){$('who').textContent=S.me.name;renderNav()}
@@ -369,8 +372,12 @@ function upsert(m){
  el.className='msg'+(ai?' ai':'')+(mine?' mine':'');
  let body=m.status==='pending'?'<span class="thinking">Улей думает</span>'+(m.content?' <span class="small muted">'+esc(m.content)+'</span>':''):render(m.content||'');
  if(m.status==='failed')body='<span class="muted">'+esc(m.content)+'</span>';
- el.innerHTML='<div class="who"><b></b> · '+time(m.created_at)+'</div>'+body;
+ el.innerHTML='<div class="who"><b></b>'+(ai?'<span class="aitag" title="Создано искусственным интеллектом">ИИ</span>':'')+' · '+time(m.created_at)+'</div>'+body;
  el.querySelector('.who b').textContent=ai?'🐝 Улей':m.author;
+ if(ai&&m.status==='done'){const t=document.createElement('div');t.className='msgtools';
+  const b=document.createElement('button');b.type='button';b.className='ghost';b.textContent='Копировать';
+  b.onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(m.content+aiFooter()).then(()=>{b.textContent='Скопировано с пометкой «Создано ИИ» ✓'});
+  t.append(b);el.append(t)}
  if(m.project){const p=m.project,c=document.createElement('div');c.className='card';
   c.innerHTML='<b></b><div class="small"></div><div class="small muted"></div>';
   c.children[0].textContent='👥 '+p.name;c.children[1].textContent=p.description||'';
@@ -382,6 +389,13 @@ function upsert(m){
   el.append(c)}
  if(atBottom||mine)box.scrollTop=box.scrollHeight;
 }
+function aiFooter(){return '\n\n— Создано ИИ · нейросеть «Улей» (модель '+(S.model||'')+')'}
+// Copying part of an AI answer by hand keeps the mark too.
+document.addEventListener('copy',e=>{const sel=getSelection();if(!sel||sel.isCollapsed)return;
+ const node=sel.anchorNode&&(sel.anchorNode.nodeType===1?sel.anchorNode:sel.anchorNode.parentElement);
+ if(!node||!node.closest('.msg.ai'))return;
+ e.clipboardData.setData('text/plain',sel.toString()+aiFooter());e.preventDefault()});
+$('exportBtn').onclick=()=>{if(S.current)location.href=API+'/chats/'+S.current+'/export'};
 $('text').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'});
 $('text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('composer').requestSubmit()}});
 $('composer').onsubmit=async e=>{

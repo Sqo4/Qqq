@@ -271,6 +271,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusGatewayTimeout, "no free node answered in time, task "+t.ID+" is still queued")
 		return
 	}
+	w.Header().Set(aiMarkHeader, "true")
 	writeJSON(w, http.StatusOK, completionBody(t, model))
 }
 
@@ -296,7 +297,7 @@ func completionBody(t protocol.Task, model string) map[string]any {
 		"id": "chatcmpl-" + t.ID, "object": "chat.completion", "created": t.CreatedAt, "model": model,
 		"choices": []map[string]any{{"index": 0, "message": msg, "finish_reason": finishReason(t)}},
 		"usage":   map[string]int{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-		"uley":    map[string]string{"verify": t.Verify},
+		"uley":    map[string]any{"verify": t.Verify, "ai_generated": true, "mark": aiMark},
 	}
 }
 
@@ -312,6 +313,7 @@ func (s *Server) streamCompletion(w http.ResponseWriter, r *http.Request, id, mo
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set(aiMarkHeader, "true")
 	created := time.Now().Unix()
 	chunk := func(delta map[string]any, finish any) {
 		b, _ := json.Marshal(map[string]any{

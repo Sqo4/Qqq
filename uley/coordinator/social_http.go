@@ -100,6 +100,7 @@ func (s *Server) registerSocial() {
 	s.mux.HandleFunc("PATCH "+p+"/chats/{id}", s.userAuth(s.handleRenameChat))
 	s.mux.HandleFunc("DELETE "+p+"/chats/{id}", s.userAuth(s.handleDeleteChat))
 	s.mux.HandleFunc("GET "+p+"/chats/{id}/messages", s.userAuth(s.handleMessages))
+	s.mux.HandleFunc("GET "+p+"/chats/{id}/export", s.userAuth(s.handleExportChat))
 	s.mux.HandleFunc("POST "+p+"/chats/{id}/messages", s.userAuth(s.handlePostMessage))
 	s.mux.HandleFunc("POST "+p+"/projects", s.userAuth(s.handleCreateProject))
 	s.mux.HandleFunc("GET "+p+"/projects/{id}", s.userAuth(s.handleGetProject))
@@ -243,7 +244,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": u, "chats": chats, "projects": projects,
-		"lobby": Chat{ID: LobbyID, Kind: ChatLobby, Title: "Общий чат"}, "model": s.hiveModel(),
+		"lobby": Chat{ID: LobbyID, Kind: ChatLobby, Title: "Общий чат"}, "model": s.hiveModel(), "ai_mark": aiMark,
 	})
 }
 

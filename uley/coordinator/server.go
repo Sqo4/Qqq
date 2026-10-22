@@ -536,6 +536,7 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such task")
 		return
 	}
+	w.Header().Set(aiMarkHeader, "true")
 	writeJSON(w, http.StatusOK, t)
 }
 
