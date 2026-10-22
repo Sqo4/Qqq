@@ -131,6 +131,15 @@ jobs:
           done
       - name: Package .deb and .tar.gz
         run: bash installer/linux/build-packages.sh "$VERSION" dist/stage dist/out
+      - name: Package the internet server (coordinator + CPU llama-server)
+        run: |
+          # The server needs no GPU: the head keeps only the output layer.
+          python3 installer/fetch_engine.py "${{ needs.version.outputs.engine }}" 'llama-.*-bin-ubuntu-x64\.(zip|tar\.gz)' dist/server/engine ||
+            python3 installer/fetch_engine.py "${{ needs.version.outputs.engine }}" 'llama-.*-bin-ubuntu-vulkan-x64\.(zip|tar\.gz)' dist/server/engine
+          cp dist/out/uley-coordinator-linux-amd64 dist/server/uley-coordinator
+          cp installer/server/install.sh dist/out/uley-server-install.sh
+          cp LICENSE installer/NOTICE.txt dist/server/
+          tar -C dist/server -czf dist/out/uley-server-linux-amd64.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: linux
